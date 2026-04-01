@@ -60,8 +60,6 @@ def svg_to_data_uri(svg_path):
     return f"data:image/svg+xml;base64,{svg_b64}"
 
 
-
-
 def hidden_axis(**kw) -> dict:
     """Return a Plotly axis config dict with visibility disabled."""
     cfg = dict(visible=False, showgrid=False, zeroline=False)
@@ -69,7 +67,9 @@ def hidden_axis(**kw) -> dict:
     return cfg
 
 
-def resolve_grid_dims(n: int, nrows: int = 1, cols: int | None = None) -> tuple[int, int]:
+def resolve_grid_dims(
+    n: int, nrows: int = 1, cols: int | None = None
+) -> tuple[int, int]:
     """Return ``(grid_cols, grid_rows)`` for laying out *n* items."""
     if cols is not None:
         grid_cols = cols
@@ -112,11 +112,10 @@ def merge_subplot(fig, sub_fig, *, row: int, col: int, total_cols: int):
 
     xaxis_key = "xaxis" if plot_idx == 1 else f"xaxis{plot_idx}"
     yaxis_key = "yaxis" if plot_idx == 1 else f"yaxis{plot_idx}"
-    fig.layout[xaxis_key].update(
-        hidden_axis(range=sub_fig.layout.xaxis.range))
+    fig.layout[xaxis_key].update(hidden_axis(range=sub_fig.layout.xaxis.range))
     fig.layout[yaxis_key].update(
-        hidden_axis(range=sub_fig.layout.yaxis.range,
-                    scaleanchor=xref, scaleratio=1))
+        hidden_axis(range=sub_fig.layout.yaxis.range, scaleanchor=xref, scaleratio=1)
+    )
 
 
 def strip_svg_header(svg_str: str) -> str:
@@ -151,6 +150,15 @@ class VectorDisplay:
             return self.fig.as_svg()
         elif hasattr(self.fig, "to_svg"):
             return self.fig.to_svg()
+        #TODO: check this last elif and verify that it doesn't cause issues in quarto
+        elif hasattr(self.fig, "to_image"):
+            try:
+                import plotly.io as pio
+                if pio.kaleido.scope:
+                    pio.kaleido.scope.mathjax = None
+            except ImportError:
+                pass
+            return self.fig.to_image(format="svg").decode("utf-8")
         return None
 
 
