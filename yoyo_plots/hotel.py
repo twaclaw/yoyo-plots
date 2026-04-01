@@ -2,6 +2,65 @@ from dataclasses import dataclass
 
 import drawsvg as draw
 
+from yoyo_plots.common import SvgDrawing
+
+# ── Defaults & constants ──────────────────────────────────────────────────
+DEFAULT_FONT = "Comic Sans MS"
+
+DEFAULT_DIGIT_COLORS = [
+    "black",
+    "red",
+    "blue",
+    "green",
+    "purple",
+    "orange",
+    "pink",
+    "brown",
+    "gray",
+    "cyan",
+]
+
+_LABEL_PADDING = 4
+_DOOR_WIDTH_RATIO = 0.5
+_DOOR_HEIGHT_RATIO = 0.6
+_DOOR_FRAME_THICKNESS = 3
+_DOOR_WOOD_COLOR = "#DEB887"
+_LABEL_DOOR_GAP = 6
+_RAIL_INSET_RATIO = 0.1
+_CAP_EXTENT_RATIO = 0.2
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────
+def to_digits(
+    value: int,
+    nplaceholders: int,
+    base: int = 10,
+    pad_zeros: bool = True,
+    colors: list[str] | None = None,
+) -> list["Number | None"]:
+    """Convert *value* to a list of ``Number`` objects in the given *base*."""
+    colors = colors or DEFAULT_DIGIT_COLORS
+    digits: list[int | None] = [0 if pad_zeros else None] * nplaceholders
+    idx = nplaceholders - 1
+
+    if value == 0 and idx >= 0:
+        digits[idx] = 0
+
+    while value > 0 and idx >= 0:
+        digits[idx] = value % base
+        value //= base
+        idx -= 1
+
+    return [
+        Number(
+            chr(ord("A") + d - 10) if isinstance(d, int) and d >= 10 else d,
+            colors[(nplaceholders - 1 - i) % len(colors)],
+        )
+        if d is not None
+        else None
+        for i, d in enumerate(digits)
+    ]
+
 
 @dataclass
 class Number:
@@ -9,7 +68,7 @@ class Number:
     color: str
 
 
-class Label:
+class Label(SvgDrawing):
     """
     The label of every room: the number and placeholders
     """
@@ -17,7 +76,7 @@ class Label:
     def __init__(
         self,
         values: list[Number | None],
-        font: str = "Comic Sans MS",
+        font: str = DEFAULT_FONT,
         cell_size: int = 40,
         draw_grid: bool = True,
         line_width: int = 1,
@@ -29,26 +88,26 @@ class Label:
         self.line_width = line_width
 
     def get_dimensions(self):
-        padding = 4
-        total_width = len(self.values) * self.cell_size + padding * 2
-        total_height = self.cell_size + padding * 2
+        total_width = len(self.values) * self.cell_size + _LABEL_PADDING * 2
+        total_height = self.cell_size + _LABEL_PADDING * 2
         return total_width, total_height
+
+    # alias used by SvgDrawing base
+    get_svg_dimensions = get_dimensions
 
     def to_group(self, offset_x: float = 0, offset_y: float = 0):
         """Returns a drawable group that can be embedded in other drawings."""
-        padding = 4
         font_size = int(self.cell_size * 0.5)
-
         g = draw.Group()
 
         for i, number in enumerate(self.values):
-            x = offset_x + padding + i * self.cell_size
+            x = offset_x + _LABEL_PADDING + i * self.cell_size
 
             if self.draw_grid:
                 g.append(
                     draw.Rectangle(
                         x,
-                        offset_y + padding,
+                        offset_y + _LABEL_PADDING,
                         self.cell_size,
                         self.cell_size,
                         fill="none",
@@ -58,7 +117,7 @@ class Label:
                 )
 
             text_x = x + self.cell_size / 2
-            text_y = offset_y + padding + self.cell_size / 2
+            text_y = offset_y + _LABEL_PADDING + self.cell_size / 2
             g.append(
                 draw.Text(
                     str(number.value) if number is not None else " ",
@@ -74,14 +133,8 @@ class Label:
 
         return g
 
-    def to_svg(self):
-        total_width, total_height = self.get_dimensions()
-        d = draw.Drawing(total_width, total_height)
-        d.append(self.to_group())
-        return d.as_svg()
 
-
-class Room:
+class Room(SvgDrawing):
     """
     A single room in the hotel, basically a rectangle with an optional door and a label.
     """
@@ -93,7 +146,7 @@ class Room:
         width: float,
         height: float,
         values: list[Number | None],
-        font: str = "Comic Sans MS",
+        font: str = DEFAULT_FONT,
         cell_size: int = 40,
         draw_grid: bool = True,
         line_width: int = 2,
@@ -109,6 +162,9 @@ class Room:
         self.draw_grid = draw_grid
         self.line_width = line_width
         self.draw_door = draw_door
+
+    def get_svg_dimensions(self):
+        return self.x + self.width + 10, self.y + self.height + 10
 
     def to_group(self):
         """Returns a drawable group that can be embedded in other drawings."""
@@ -126,12 +182,10 @@ class Room:
             )
         )
 
-        door_width = self.width * 0.5
-        door_height = self.height * 0.6
+        door_width = self.width * _DOOR_WIDTH_RATIO
+        door_height = self.height * _DOOR_HEIGHT_RATIO
         door_x = self.x + (self.width - door_width) / 2
         door_y = self.y + self.height - door_height
-
-        label_door_gap = 6
 
         label = Label(
             self.values,
@@ -143,35 +197,29 @@ class Room:
         label_width, label_height = label.get_dimensions()
         label_x = self.x + (self.width - label_width) / 2
         if self.draw_door:
-            label_y = door_y - label_height - label_door_gap
+            label_y = door_y - label_height - _LABEL_DOOR_GAP
         else:
             label_y = self.y + (self.height - label_height) / 2
 
         g.append(label.to_group(offset_x=label_x, offset_y=label_y))
 
         if self.draw_door:
-            frame_thickness = 3
-            wood_color = "#DEB887"  # hardcoded wood color
-
             g.append(
                 draw.Rectangle(
                     door_x,
                     door_y,
                     door_width,
                     door_height,
-                    fill=wood_color,
+                    fill=_DOOR_WOOD_COLOR,
                     stroke="none",
                 )
             )
-
-            interior_width = door_width - frame_thickness * 2
-            interior_height = door_height - frame_thickness * 2
             g.append(
                 draw.Rectangle(
-                    door_x + frame_thickness,
-                    door_y + frame_thickness,
-                    interior_width,
-                    interior_height,
+                    door_x + _DOOR_FRAME_THICKNESS,
+                    door_y + _DOOR_FRAME_THICKNESS,
+                    door_width - _DOOR_FRAME_THICKNESS * 2,
+                    door_height - _DOOR_FRAME_THICKNESS * 2,
                     fill="white",
                     stroke="none",
                 )
@@ -179,13 +227,8 @@ class Room:
 
         return g
 
-    def to_svg(self):
-        d = draw.Drawing(self.x + self.width + 10, self.y + self.height + 10)
-        d.append(self.to_group())
-        return d.as_svg()
 
-
-class Floor:
+class Floor(SvgDrawing):
     """
     A collection of contiguous rooms forming a floor in the hotel.
     """
@@ -204,6 +247,7 @@ class Floor:
         line_width: int = 1,
         draw_door: bool = True,
         cell_size: int = 40,
+        colors: list[str] | None = None,
     ):
         self.x = x
         self.y = y
@@ -217,49 +261,27 @@ class Floor:
         self.draw_door = draw_door
         self.cell_size = cell_size
         self.offset = offset
+        self.colors = colors or DEFAULT_DIGIT_COLORS
 
-    def to_digits(self, value: int, colors: list[str]) -> list[Number]:
-        """Converts in the given base"""
-        digits = [0 if self.pad_zeros else None] * self.nplaceholders
-        idx = self.nplaceholders - 1
-
-        if value == 0 and idx >= 0:
-            digits[idx] = 0
-
-        while value > 0 and idx >= 0:
-            digits[idx] = value % self.base
-            value //= self.base
-            idx -= 1
-        return [
-            Number(
-                chr(ord('A') + d - 10) if isinstance(d, int) and d >= 10 else d,
-                colors[(self.nplaceholders - 1 - i) % len(colors)],
-            )
-            if d is not None
-            else None
-            for i, d in enumerate(digits)
-        ]
+    def get_svg_dimensions(self):
+        return (
+            self.x + self.base * self.room_width + 10,
+            self.y + self.room_height + 10,
+        )
 
     def to_group(self):
         """Returns a drawable group of contiguous rooms."""
         g = draw.Group()
 
-        colors = [
-            "black",
-            "red",
-            "blue",
-            "green",
-            "purple",
-            "orange",
-            "pink",
-            "brown",
-            "gray",
-            "cyan",
-        ]
-
         for i in range(self.base):
             room_x = self.x + i * self.room_width
-            values = self.to_digits(i + self.offset, colors)
+            values = to_digits(
+                i + self.offset,
+                self.nplaceholders,
+                base=self.base,
+                pad_zeros=self.pad_zeros,
+                colors=self.colors,
+            )
 
             room = Room(
                 x=room_x,
@@ -276,15 +298,8 @@ class Floor:
 
         return g
 
-    def to_svg(self):
-        total_width = self.x + self.base * self.room_width + 10
-        total_height = self.y + self.room_height + 10
-        d = draw.Drawing(total_width, total_height)
-        d.append(self.to_group())
-        return d.as_svg()
 
-
-class Building:
+class Building(SvgDrawing):
     """
     A collection of stacked floors forming the hotel building.
     """
@@ -322,9 +337,15 @@ class Building:
         self.draw_door = draw_door
         self.cell_size = cell_size
         self.draw_grid_line = draw_grid_line
-        self.ladders = []
+        self.ladders: list[Ladder] = []
         self.ladder_line_width = ladder_line_width
         self.without_offset = without_offset
+
+    def get_svg_dimensions(self):
+        return (
+            self.x + self.base * self.room_width + 10,
+            self.y + self.nfloors * self.room_height + 10,
+        )
 
     def to_group(self):
         """Returns a drawable group of stacked floors."""
@@ -350,7 +371,6 @@ class Building:
             )
             g.append(floor.to_group())
 
-        # Draw all ladders
         for ladder in self.ladders:
             g.append(ladder.to_group())
 
@@ -364,7 +384,7 @@ class Building:
         width: float = 0.3,
         height: int = 1,
         rung_spacing: float = 40,
-    ):
+    ) -> "Building":
         """Add a ladder at the specified floor and room position."""
         ladder_width = self.room_width * width
         ladder_x = (
@@ -372,26 +392,21 @@ class Building:
         )
         ladder_y = self.y + (self.nfloors - floor_num - height) * self.room_height
 
-        ladder = Ladder(
-            x=ladder_x,
-            y=ladder_y,
-            width=ladder_width,
-            height=self.room_height * height,
-            line_width=self.ladder_line_width,
-            color=color,
-            rung_spacing=rung_spacing,
+        self.ladders.append(
+            Ladder(
+                x=ladder_x,
+                y=ladder_y,
+                width=ladder_width,
+                height=self.room_height * height,
+                line_width=self.ladder_line_width,
+                color=color,
+                rung_spacing=rung_spacing,
+            )
         )
-        self.ladders.append(ladder)
-
-    def to_svg(self):
-        total_width = self.x + self.base * self.room_width + 10
-        total_height = self.y + self.nfloors * self.room_height + 10
-        d = draw.Drawing(total_width, total_height)
-        d.append(self.to_group())
-        return d.as_svg()
+        return self
 
 
-class Ladder:
+class Ladder(SvgDrawing):
     """
     A simple ladder.
     """
@@ -414,17 +429,21 @@ class Ladder:
         self.color = color
         self.rung_spacing = rung_spacing
 
+    def get_svg_dimensions(self):
+        return self.x + self.width + 10, self.y + self.height + 10
+
     def to_group(self):
         """Returns a drawable group representing a ladder."""
         g = draw.Group()
 
-        # Two vertical rails
-        rail_inset = self.width * 0.1
+        rail_inset = self.width * _RAIL_INSET_RATIO
         left_rail_x = self.x + rail_inset
         right_rail_x = self.x + self.width - rail_inset
-        cap_extent = self.width * 0.2
+        cap_extent = self.width * _CAP_EXTENT_RATIO
+        rail_width = self.line_width + 1
 
         for rail_x in (left_rail_x, right_rail_x):
+            # Vertical rail
             g.append(
                 draw.Line(
                     rail_x,
@@ -432,38 +451,28 @@ class Ladder:
                     rail_x,
                     self.y + self.height,
                     stroke=self.color,
-                    stroke_width=self.line_width + 1,
+                    stroke_width=rail_width,
                 )
             )
-            # Top cap (T shape)
-            g.append(
-                draw.Line(
-                    rail_x - cap_extent,
-                    self.y,
-                    rail_x + cap_extent,
-                    self.y,
-                    stroke=self.color,
-                    stroke_width=self.line_width + 1,
+            # Top and bottom caps
+            for cap_y in (self.y, self.y + self.height):
+                g.append(
+                    draw.Line(
+                        rail_x - cap_extent,
+                        cap_y,
+                        rail_x + cap_extent,
+                        cap_y,
+                        stroke=self.color,
+                        stroke_width=rail_width,
+                    )
                 )
-            )
-            # Bottom cap (inverted T shape)
-            g.append(
-                draw.Line(
-                    rail_x - cap_extent,
-                    self.y + self.height,
-                    rail_x + cap_extent,
-                    self.y + self.height,
-                    stroke=self.color,
-                    stroke_width=self.line_width + 1,
-                )
-            )
 
         # Horizontal rungs
         num_rungs = max(3, int(self.height / self.rung_spacing))
-        rung_spacing = self.height / (num_rungs + 1)
+        spacing = self.height / (num_rungs + 1)
 
         for i in range(1, num_rungs + 1):
-            rung_y = self.y + i * rung_spacing
+            rung_y = self.y + i * spacing
             g.append(
                 draw.Line(
                     left_rail_x,
@@ -482,7 +491,7 @@ class Ladder:
         bottom_label: "Label | None" = None,
         annotation: str | None = None,
         font_size: int = 20,
-        font: str = "Comic Sans MS",
+        font: str = DEFAULT_FONT,
         annotation_gap: float = 16,
     ) -> draw.Drawing:
         return draw_ladders(
@@ -500,7 +509,7 @@ def draw_ladders(
     top_label: "Label | None" = None,
     bottom_label: "Label | None" = None,
     font_size: int = 20,
-    font: str = "Comic Sans MS",
+    font: str = DEFAULT_FONT,
     annotation_gap: float = 16,
 ) -> draw.Drawing:
     """

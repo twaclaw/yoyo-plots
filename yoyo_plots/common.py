@@ -124,6 +124,29 @@ def strip_svg_header(svg_str: str) -> str:
     return svg_str[start:] if start > 0 else svg_str
 
 
+class SvgDrawing:
+    """Base class for objects that render themselves as SVG via drawsvg.
+
+    Subclasses must implement:
+    * ``to_group()``  – return a ``drawsvg.Group``
+    * ``get_svg_dimensions()`` – return ``(width, height)``
+    """
+
+    def to_group(self, **kwargs):
+        raise NotImplementedError
+
+    def get_svg_dimensions(self) -> tuple[float, float]:
+        raise NotImplementedError
+
+    def to_svg(self) -> str:
+        import drawsvg as draw
+
+        w, h = self.get_svg_dimensions()
+        d = draw.Drawing(w, h)
+        d.append(self.to_group())
+        return d.as_svg()
+
+
 class VectorDisplay:
     def __init__(self, fig):
         self.fig = fig
