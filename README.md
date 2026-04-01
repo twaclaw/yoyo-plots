@@ -21,7 +21,7 @@ uv sync
 
 ## Examples
 
-Check [examples.ipynb] for some examples.
+Check [examples.ipynb](./examples.ipynb) for some examples.
 
 
 ## Contributing
