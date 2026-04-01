@@ -27,3 +27,10 @@ Check [examples.ipynb](./examples.ipynb) for some examples.
 ## Contributing
 
 We appreciate your contributions. Please feel free to expand, refactor, simplify, and improve.
+
+
+## Credits
+
+
+- Images from [Freesvg.org](https://freesvg.org/), licensed under Creative Commons CC0.
+- Emoji artwork provided by [Twemoji](https://twemoji.twitter.com/), licensed under [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/)
