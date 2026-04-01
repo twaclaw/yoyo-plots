@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "yoyo-plots"
+version = "0.1.0"
+description = "A library generating SVG figures for the Yo-Yo-Math book: https://github.com/twaclaw/yo-yo-math"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "drawsvg>=2.4.1",
+    "figural>=0.1.0",
+    "kaleido>=1.2.0",
+    "matplotlib>=3.10.8",
+    "nbformat>=5.10.4",
+    "plotly>=6.5.2",
+    "soroban-abacus>=0.1.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["yoyo_plots"]
+
+[tool.hatch.build.targets.wheel.shared-data]
+"data" = "data"
