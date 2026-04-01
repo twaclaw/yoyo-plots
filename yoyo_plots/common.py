@@ -173,17 +173,7 @@ class VectorDisplay:
             return self.fig.as_svg()
         elif hasattr(self.fig, "to_svg"):
             return self.fig.to_svg()
-        #TODO: check this last elif and verify that it doesn't cause issues in quarto
-        elif hasattr(self.fig, "to_image"):
-            try:
-                import plotly.io as pio
-                if pio.kaleido.scope:
-                    pio.kaleido.scope.mathjax = None
-            except ImportError:
-                pass
-            return self.fig.to_image(format="svg").decode("utf-8")
         return None
-
 
 def display_vector(fig):
     """
