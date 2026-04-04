@@ -185,7 +185,8 @@ def display_vector(fig):
 
 
 def combine_svgs(
-    svgs: list, direction: str = "horizontal", spacing: float = 15.0
+    svgs: list, direction: str = "horizontal", spacing: float = 15.0,
+    separators: list | str | None = None, separator_font_size: float = 24.0,
 ) -> str:
     """
     Combines multiple SVG strings or draw.Drawing objects into a single SVG layout.
@@ -253,12 +254,48 @@ def combine_svgs(
     if not parsed_svgs:
         return "<svg></svg>"
 
+    # Normalise separators to a list of (n-1) items (dict or None)
+    n = len(parsed_svgs)
+    sep_items: list[dict | None] = [None] * (n - 1)
+    if separators is not None:
+        if isinstance(separators, str):
+            raw = [separators] * (n - 1)
+        else:
+            raw = list(separators)
+        for i, s in enumerate(raw[: n - 1]):
+            if isinstance(s, str):
+                sep_items[i] = {"text": s, "font_size": separator_font_size}
+            elif isinstance(s, dict):
+                sep_items[i] = {
+                    "text": s["text"],
+                    "font_size": s.get("font_size", separator_font_size),
+                }
+
+    # Estimate separator text widths (≈ 0.6 × font_size per character)
+    sep_widths: list[float] = []
+    for sep in sep_items:
+        if sep:
+            sep_widths.append(len(sep["text"]) * sep["font_size"] * 0.6)
+        else:
+            sep_widths.append(0.0)
+
+    # Compute total dimensions
     if direction == "horizontal":
-        total_width -= spacing
-        total_height = max_height
+        total_height = max(item["height"] for item in parsed_svgs)
+        total_width = sum(item["width"] for item in parsed_svgs)
+        for i in range(n - 1):
+            if sep_items[i]:
+                total_width += spacing + sep_widths[i] + spacing
+            else:
+                total_width += spacing
     else:
-        total_height -= spacing
-        total_width = max_width
+        total_width = max(item["width"] for item in parsed_svgs)
+        total_height = sum(item["height"] for item in parsed_svgs)
+        for i in range(n - 1):
+            if sep_items[i]:
+                total_height += spacing + sep_items[i]["font_size"] * 1.2 + spacing
+            else:
+                total_height += spacing
 
     combined = [
         f'<svg width="{total_width}" height="{total_height}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">'
@@ -267,7 +304,7 @@ def combine_svgs(
     current_x = 0.0
     current_y = 0.0
 
-    for item in parsed_svgs:
+    for idx, item in enumerate(parsed_svgs):
         if direction == "horizontal":
             y_offset = current_y + (total_height - item["height"]) / 2.0
             x_offset = current_x
@@ -279,10 +316,34 @@ def combine_svgs(
             f'<svg x="{x_offset}" y="{y_offset}" width="{item["width"]}" height="{item["height"]}"{item["viewbox"]} {item["xmlns"]}>{item["inner"]}</svg>'
         )
 
-        if direction == "horizontal":
-            current_x += item["width"] + spacing
-        else:
-            current_y += item["height"] + spacing
+        # Add gap + optional separator before the next image
+        if idx < n - 1:
+            sep = sep_items[idx]
+            if direction == "horizontal":
+                current_x += item["width"] + spacing
+                if sep:
+                    text_x = current_x + sep_widths[idx] / 2.0
+                    text_y = total_height / 2.0
+                    combined.append(
+                        f'<text x="{text_x}" y="{text_y}" '
+                        f'font-size="{sep["font_size"]}" '
+                        f'text-anchor="middle" dominant-baseline="central" '
+                        f'font-family="sans-serif">{sep["text"]}</text>'
+                    )
+                    current_x += sep_widths[idx] + spacing
+            else:
+                current_y += item["height"] + spacing
+                if sep:
+                    sep_h = sep["font_size"] * 1.2
+                    text_x = total_width / 2.0
+                    text_y = current_y + sep_h / 2.0
+                    combined.append(
+                        f'<text x="{text_x}" y="{text_y}" '
+                        f'font-size="{sep["font_size"]}" '
+                        f'text-anchor="middle" dominant-baseline="central" '
+                        f'font-family="sans-serif">{sep["text"]}</text>'
+                    )
+                    current_y += sep_h + spacing
 
     combined.append("</svg>")
 

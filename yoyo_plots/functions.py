@@ -78,6 +78,10 @@ class FunctionPlot:
             self._ax.tick_params(labelsize=self._tck_fs)
             if show_grid:
                 self._ax.grid(True, linestyle="--", alpha=0.5)
+            # Flush x-axis; keep default y-bottom, small extra headroom on top
+            self._ax.set_xlim(self._x.min(), self._x.max())
+            y_lo, y_hi = self._ax.get_ylim()
+            self._ax.set_ylim(y_lo, y_hi + (self._y.max() - self._y.min()) * 0.05)
 
         plt.close(self._fig)
 
@@ -208,6 +212,84 @@ class FunctionPlot:
                     va="center",
                     fontsize=max(7, self._tck_fs - 1),
                     zorder=3,
+                )
+        return self
+
+    def add_markers(self, markers: dict[float, dict]) -> "FunctionPlot":
+        """Place labelled markers on the curve.
+
+        Parameters
+        ----------
+        markers : dict
+            ``{x_value: opts}`` where *opts* is a dict with keys:
+
+            * ``"color"``      marker colour (required)
+            * ``"label"``      annotation text (default ``None``)
+            * ``"help_line"``  draw a dotted line to the y-axis
+              (default ``False``)
+
+        Example::
+
+            plot.add_markers({
+                2: {"color": "red", "label": "peak", "help_line": True},
+                5: {"color": "blue"},
+            })
+        """
+        for x_val, opts in markers.items():
+            y_val = float(np.interp(x_val, self._x, self._y))
+            color = opts["color"]
+            label = opts.get("label")
+            help_line = opts.get("help_line", False)
+
+            # marker dot
+            self._ax.plot(
+                x_val, y_val,
+                "o",
+                color=color,
+                markersize=8,
+                zorder=4,
+            )
+
+            # dotted help lines to the axis spines
+            if help_line:
+                x_spine = self._ax.get_xlim()[0]
+                y_spine = self._ax.get_ylim()[0]
+                self._ax.plot(
+                    [x_spine, x_val],
+                    [y_val, y_val],
+                    color=color,
+                    linestyle=":",
+                    linewidth=1.2,
+                    alpha=0.6,
+                    zorder=1,
+                    clip_on=False,
+                )
+                self._ax.plot(
+                    [x_val, x_val],
+                    [y_spine, y_val],
+                    color=color,
+                    linestyle=":",
+                    linewidth=1.2,
+                    alpha=0.6,
+                    zorder=1,
+                    clip_on=False,
+                )
+
+            # annotated label with arrow
+            if label:
+                self._ax.annotate(
+                    label,
+                    xy=(x_val, y_val),
+                    xytext=(15, 15),
+                    textcoords="offset points",
+                    fontsize=self._lbl_fs,
+                    color=color,
+                    arrowprops=dict(
+                        arrowstyle="->",
+                        color=color,
+                        lw=1.5,
+                    ),
+                    zorder=5,
                 )
         return self
 
