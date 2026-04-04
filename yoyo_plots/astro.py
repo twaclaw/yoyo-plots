@@ -15,7 +15,10 @@ import math
 import os
 from collections import defaultdict
 
+import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import to_rgb
+from matplotlib.patches import Ellipse as MplEllipse
 from IPython.display import SVG
 
 from .common import pkg_asset
@@ -49,6 +52,14 @@ _LABEL_ALPHA = 0.7
 
 _STAR_NAME_COLOR = "#333"
 _STAR_NAME_FONT_SIZE = 9
+
+_MARKER_PADDING = 1.5
+_MARKER_FILL_ALPHA = 0.12
+_MARKER_EDGE_ALPHA = 0.6
+_MARKER_EDGE_WIDTH = 1.5
+_MARKER_FONT_SIZE = 11
+_MARKER_MIN_AXIS = 0.8
+_MARKER_LABEL_GAP = 0.5
 
 _ZODIAC_RADIUS = 10.0
 _ZODIAC_SCALE = 0.15
@@ -199,6 +210,49 @@ def _mean_ra(ras: list[float]) -> float:
     return sum(ras) / len(ras)
 
 
+def _fit_ellipse(
+    points: list[tuple[float, float]],
+    padding: float = _MARKER_PADDING,
+) -> tuple[float, float, float, float, float]:
+    """Fit a bounding ellipse around *points* → *(cx, cy, w, h, angle_deg)*.
+
+    Uses PCA to find the natural axes of the point cloud, then sizes
+    the ellipse to contain every point plus *padding* degrees on each
+    side.  Returned *w* and *h* are full diameters suitable for
+    ``matplotlib.patches.Ellipse``.
+    """
+    n = len(points)
+    ras = [p[0] for p in points]
+    decs = [p[1] for p in points]
+
+    cx = _mean_ra(ras)
+    cy = sum(decs) / n
+
+    if n == 1:
+        return cx, cy, padding * 2, padding * 2, 0.0
+
+    # Centre the coordinates
+    dx = [_delta_ra(r, cx) for r in ras]
+    dy = [d - cy for d in decs]
+    coords = np.array([dx, dy])  # shape (2, n)
+
+    cov = np.cov(coords)
+    eigenvalues, eigenvectors = np.linalg.eigh(cov)
+
+    # Sort by descending eigenvalue (major axis first)
+    order = np.argsort(eigenvalues)[::-1]
+    eigenvectors = eigenvectors[:, order]
+
+    angle = np.degrees(np.arctan2(eigenvectors[1, 0], eigenvectors[0, 0]))
+
+    # Project points onto principal axes to find extent
+    proj = eigenvectors.T @ coords  # (2, n)
+    semi_a = max(float(np.max(np.abs(proj[0, :]))), _MARKER_MIN_AXIS) + padding
+    semi_b = max(float(np.max(np.abs(proj[1, :]))), _MARKER_MIN_AXIS) + padding
+
+    return cx, cy, semi_a * 2, semi_b * 2, float(angle)
+
+
 def load_constellation(
     target_abbrs: list[str],
     filename: str = DATA_FILE,
@@ -317,6 +371,7 @@ class SkyChart:
         self.figsize = figsize
         self._show_constellation_labels = False
         self._show_star_names = False
+        self._markers: dict[tuple[str, ...], dict] = {}
 
     def add_constellation_labels(self) -> SkyChart:
         """Show constellation names at their centroids."""
@@ -326,6 +381,22 @@ class SkyChart:
     def add_star_names(self) -> SkyChart:
         """Label well-known stars by name."""
         self._show_star_names = True
+        return self
+
+    def add_markers(
+        self,
+        markers: dict[tuple[str, ...], dict],
+    ) -> SkyChart:
+        """Highlight groups of stars with labelled ellipses.
+
+        Parameters
+        ----------
+        markers : dict
+            ``{(star_key, ...): {"color": str, "text": str}}``
+            where each *star_key* uses the internal Bayer-style
+            notation, e.g. ``"delOri"`` for δ Orionis.
+        """
+        self._markers = markers
         return self
 
     def to_figure(self) -> plt.Figure:
@@ -384,6 +455,50 @@ class SkyChart:
                     va="center",
                     zorder=0,
                 )
+
+        # Markers
+        if self._markers:
+            star_lookup: dict[str, tuple[float, float]] = {}
+            for s in stars:
+                star_lookup[_star_key(s["label"], s["con"])] = (s["ra"], s["dec"])
+
+            for star_keys, opts in self._markers.items():
+                pts = [star_lookup[k] for k in star_keys if k in star_lookup]
+                if not pts:
+                    continue
+                color = opts.get("color", "#FF6644")
+                text = opts.get("text", "")
+                cx, cy, w, h, angle = _fit_ellipse(pts)
+                rgb = to_rgb(color)
+                patch = MplEllipse(
+                    (cx, cy),
+                    w,
+                    h,
+                    angle=angle,
+                    facecolor=(*rgb, _MARKER_FILL_ALPHA),
+                    edgecolor=(*rgb, _MARKER_EDGE_ALPHA),
+                    linewidth=_MARKER_EDGE_WIDTH,
+                    linestyle="--",
+                    zorder=4,
+                )
+                ax.add_patch(patch)
+                if text:
+                    angle_rad = np.radians(angle)
+                    half_bbox_h = (
+                        (w / 2) * abs(np.sin(angle_rad))
+                        + (h / 2) * abs(np.cos(angle_rad))
+                    )
+                    ax.text(
+                        cx,
+                        cy + half_bbox_h + _MARKER_LABEL_GAP,
+                        text,
+                        color=color,
+                        fontsize=_MARKER_FONT_SIZE,
+                        fontweight="bold",
+                        ha="center",
+                        va="bottom",
+                        zorder=5,
+                    )
 
         ax.invert_xaxis()  # Sky-map convention
         ax.set_aspect("equal", "datalim")
@@ -565,12 +680,15 @@ def plot_sky(
     output_file: str | None = None,
     show_constellations: bool = False,
     show_stars: bool = False,
+    markers: dict[tuple[str, ...], dict] | None = None,
 ) -> SVG:
     chart = SkyChart(target_list)
     if show_constellations:
         chart.add_constellation_labels()
     if show_stars:
         chart.add_star_names()
+    if markers:
+        chart.add_markers(markers)
     fig = chart.to_figure()
     if output_file:
         fig.savefig(output_file, transparent=True, bbox_inches="tight", pad_inches=0.1)
