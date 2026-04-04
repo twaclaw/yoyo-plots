@@ -24,6 +24,9 @@ uv sync
 Check [examples.ipynb](./examples.ipynb) for some examples.
 
 
+Additional examples can be found in the source files of [yo-yo-math](https://github.com/twaclaw/yo-yo-math).
+
+
 ## Contributing
 
 We appreciate your contributions. Please feel free to expand, refactor, simplify, and improve.
