@@ -255,6 +255,10 @@ def combine_svgs(
         return "<svg></svg>"
 
     # Normalise separators to a list of (n-1) items (dict or None)
+    # Each item is either:
+    #   {"type": "text", "text": ..., "font_size": ...}
+    #   {"type": "box",  "width": ..., "height": ..., "stroke": ..., "stroke_width": ...}
+    #   None
     n = len(parsed_svgs)
     sep_items: list[dict | None] = [None] * (n - 1)
     if separators is not None:
@@ -264,20 +268,36 @@ def combine_svgs(
             raw = list(separators)
         for i, s in enumerate(raw[: n - 1]):
             if isinstance(s, str):
-                sep_items[i] = {"text": s, "font_size": separator_font_size}
+                sep_items[i] = {"type": "text", "text": s, "font_size": separator_font_size}
             elif isinstance(s, dict):
-                sep_items[i] = {
-                    "text": s["text"],
-                    "font_size": s.get("font_size", separator_font_size),
-                }
+                if s.get("type") == "box":
+                    sep_items[i] = {
+                        "type": "box",
+                        "width": s.get("width", 40),
+                        "height": s.get("height", 40),
+                        "stroke": s.get("stroke", "black"),
+                        "stroke_width": s.get("stroke_width", 1.5),
+                    }
+                else:
+                    sep_items[i] = {
+                        "type": "text",
+                        "text": s["text"],
+                        "font_size": s.get("font_size", separator_font_size),
+                    }
 
-    # Estimate separator text widths (≈ 0.6 × font_size per character)
+    # Estimate separator occupied size along each axis
     sep_widths: list[float] = []
+    sep_heights: list[float] = []
     for sep in sep_items:
-        if sep:
+        if sep and sep["type"] == "box":
+            sep_widths.append(sep["width"])
+            sep_heights.append(sep["height"])
+        elif sep and sep["type"] == "text":
             sep_widths.append(len(sep["text"]) * sep["font_size"] * 0.6)
+            sep_heights.append(sep["font_size"] * 1.2)
         else:
             sep_widths.append(0.0)
+            sep_heights.append(0.0)
 
     # Compute total dimensions
     if direction == "horizontal":
@@ -293,7 +313,7 @@ def combine_svgs(
         total_height = sum(item["height"] for item in parsed_svgs)
         for i in range(n - 1):
             if sep_items[i]:
-                total_height += spacing + sep_items[i]["font_size"] * 1.2 + spacing
+                total_height += spacing + sep_heights[i] + spacing
             else:
                 total_height += spacing
 
@@ -321,7 +341,17 @@ def combine_svgs(
             sep = sep_items[idx]
             if direction == "horizontal":
                 current_x += item["width"] + spacing
-                if sep:
+                if sep and sep["type"] == "box":
+                    bx = current_x
+                    by = (total_height - sep["height"]) / 2.0
+                    combined.append(
+                        f'<rect x="{bx}" y="{by}" '
+                        f'width="{sep["width"]}" height="{sep["height"]}" '
+                        f'fill="none" stroke="{sep["stroke"]}" '
+                        f'stroke-width="{sep["stroke_width"]}"/>'
+                    )
+                    current_x += sep_widths[idx] + spacing
+                elif sep and sep["type"] == "text":
                     text_x = current_x + sep_widths[idx] / 2.0
                     text_y = total_height / 2.0
                     combined.append(
@@ -333,17 +363,26 @@ def combine_svgs(
                     current_x += sep_widths[idx] + spacing
             else:
                 current_y += item["height"] + spacing
-                if sep:
-                    sep_h = sep["font_size"] * 1.2
+                if sep and sep["type"] == "box":
+                    bx = (total_width - sep["width"]) / 2.0
+                    by = current_y
+                    combined.append(
+                        f'<rect x="{bx}" y="{by}" '
+                        f'width="{sep["width"]}" height="{sep["height"]}" '
+                        f'fill="none" stroke="{sep["stroke"]}" '
+                        f'stroke-width="{sep["stroke_width"]}"/>'
+                    )
+                    current_y += sep_heights[idx] + spacing
+                elif sep and sep["type"] == "text":
                     text_x = total_width / 2.0
-                    text_y = current_y + sep_h / 2.0
+                    text_y = current_y + sep_heights[idx] / 2.0
                     combined.append(
                         f'<text x="{text_x}" y="{text_y}" '
                         f'font-size="{sep["font_size"]}" '
                         f'text-anchor="middle" dominant-baseline="central" '
                         f'font-family="sans-serif">{sep["text"]}</text>'
                     )
-                    current_y += sep_h + spacing
+                    current_y += sep_heights[idx] + spacing
 
     combined.append("</svg>")
 
