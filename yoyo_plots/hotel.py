@@ -210,17 +210,30 @@ class Room(SvgDrawing):
         if self.draw_door:
             ft = _DOOR_FRAME_THICKNESS
             # Dark wood frame
-            g.append(draw.Rectangle(
-                door_x, door_y, door_width, door_height,
-                fill="#6B4226", stroke="#4A2E14", stroke_width=1.5,
-            ))
+            g.append(
+                draw.Rectangle(
+                    door_x,
+                    door_y,
+                    door_width,
+                    door_height,
+                    fill="#6B4226",
+                    stroke="#4A2E14",
+                    stroke_width=1.5,
+                )
+            )
             # Lighter door body
             body_x, body_y = door_x + ft, door_y + ft
             body_w, body_h = door_width - ft * 2, door_height - ft * 2
-            g.append(draw.Rectangle(
-                body_x, body_y, body_w, body_h,
-                fill=_DOOR_WOOD_COLOR, stroke="none",
-            ))
+            g.append(
+                draw.Rectangle(
+                    body_x,
+                    body_y,
+                    body_w,
+                    body_h,
+                    fill=_DOOR_WOOD_COLOR,
+                    stroke="none",
+                )
+            )
             # Two recessed panels
             pm = max(3, body_w * 0.1)
             pw = body_w - pm * 2
@@ -228,20 +241,37 @@ class Room(SvgDrawing):
             ph = (body_h - pg * 3) / 2
             ppx = body_x + pm
             for ppy in (body_y + pg, body_y + pg * 2 + ph):
-                g.append(draw.Rectangle(
-                    ppx, ppy, pw, ph,
-                    fill="#C9A96E", stroke="#A08050", stroke_width=1,
-                    rx=2, ry=2,
-                ))
+                g.append(
+                    draw.Rectangle(
+                        ppx,
+                        ppy,
+                        pw,
+                        ph,
+                        fill="#C9A96E",
+                        stroke="#A08050",
+                        stroke_width=1,
+                        rx=2,
+                        ry=2,
+                    )
+                )
             # Doorknob with highlight
             kr = max(2, door_width * 0.05)
             kx = body_x + body_w - pm - kr - 2
             ky = body_y + body_h / 2
-            g.append(draw.Circle(kx, ky, kr,
-                                 fill="#DAA520", stroke="#B8860B",
-                                 stroke_width=1))
-            g.append(draw.Circle(kx - kr * 0.2, ky - kr * 0.2, kr * 0.3,
-                                 fill="#FFE4B5", stroke="none"))
+            g.append(
+                draw.Circle(
+                    kx, ky, kr, fill="#DAA520", stroke="#B8860B", stroke_width=1
+                )
+            )
+            g.append(
+                draw.Circle(
+                    kx - kr * 0.2,
+                    ky - kr * 0.2,
+                    kr * 0.3,
+                    fill="#FFE4B5",
+                    stroke="none",
+                )
+            )
 
         return g
 
@@ -266,6 +296,7 @@ class Floor(SvgDrawing):
         draw_door: bool = True,
         cell_size: int = 40,
         colors: list[str] | None = None,
+        skip_rooms: set[int] | None = None,
     ):
         self.x = x
         self.y = y
@@ -280,6 +311,7 @@ class Floor(SvgDrawing):
         self.cell_size = cell_size
         self.offset = offset
         self.colors = colors or DEFAULT_DIGIT_COLORS
+        self.skip_rooms = skip_rooms or set()
 
     def get_svg_dimensions(self):
         return (
@@ -293,13 +325,17 @@ class Floor(SvgDrawing):
 
         for i in range(self.base):
             room_x = self.x + i * self.room_width
-            values = to_digits(
-                i + self.offset,
-                self.nplaceholders,
-                base=self.base,
-                pad_zeros=self.pad_zeros,
-                colors=self.colors,
-            )
+            room_number = i + self.offset
+            if room_number in self.skip_rooms:
+                values = [None] * self.nplaceholders
+            else:
+                values = to_digits(
+                    room_number,
+                    self.nplaceholders,
+                    base=self.base,
+                    pad_zeros=self.pad_zeros,
+                    colors=self.colors,
+                )
 
             room = Room(
                 x=room_x,
@@ -334,17 +370,34 @@ def _draw_potted_plant(parent, x, ground_y, scale: float = 1.0):
     pot.Z()
     parent.append(pot)
     # Pot rim
-    parent.append(draw.Rectangle(
-        x - pw_top / 2 - 1 * s, py - 2 * s, pw_top + 2 * s, 3 * s,
-        fill="#D2A679", stroke="#8B5A2B", stroke_width=0.5, rx=1, ry=1,
-    ))
+    parent.append(
+        draw.Rectangle(
+            x - pw_top / 2 - 1 * s,
+            py - 2 * s,
+            pw_top + 2 * s,
+            3 * s,
+            fill="#D2A679",
+            stroke="#8B5A2B",
+            stroke_width=0.5,
+            rx=1,
+            ry=1,
+        )
+    )
     # Foliage (three overlapping circles)
-    parent.append(draw.Circle(x - 4 * s, py - 5 * s, 6 * s, fill="#228B22", stroke="none"))
-    parent.append(draw.Circle(x + 4 * s, py - 5 * s, 6 * s, fill="#2E8B57", stroke="none"))
+    parent.append(
+        draw.Circle(x - 4 * s, py - 5 * s, 6 * s, fill="#228B22", stroke="none")
+    )
+    parent.append(
+        draw.Circle(x + 4 * s, py - 5 * s, 6 * s, fill="#2E8B57", stroke="none")
+    )
     parent.append(draw.Circle(x, py - 9 * s, 7 * s, fill="#32CD32", stroke="none"))
     # Small flower
-    parent.append(draw.Circle(x + 2 * s, py - 14 * s, 3 * s, fill="#FF69B4", stroke="none"))
-    parent.append(draw.Circle(x + 2 * s, py - 14 * s, 1.2 * s, fill="#FFD700", stroke="none"))
+    parent.append(
+        draw.Circle(x + 2 * s, py - 14 * s, 3 * s, fill="#FF69B4", stroke="none")
+    )
+    parent.append(
+        draw.Circle(x + 2 * s, py - 14 * s, 1.2 * s, fill="#FFD700", stroke="none")
+    )
 
 
 class Building(SvgDrawing):
@@ -371,6 +424,7 @@ class Building(SvgDrawing):
         roof: bool = False,
         plants: bool = False,
         plant_scale: float = 1.0,
+        skip_rooms: list[int] | None = None,
     ):
         self.x = x
         self.y = y
@@ -394,6 +448,7 @@ class Building(SvgDrawing):
         self.roof = roof
         self.plants = plants
         self.plant_scale = plant_scale
+        self.skip_rooms = set(skip_rooms) if skip_rooms else set()
 
     def get_svg_dimensions(self):
         roof_h = _ROOF_HEIGHT if self.roof else 0
@@ -432,6 +487,7 @@ class Building(SvgDrawing):
                 line_width=self.line_width,
                 draw_door=self.draw_door,
                 cell_size=self.cell_size,
+                skip_rooms=self.skip_rooms,
             )
             content.append(floor.to_group())
 
@@ -447,8 +503,7 @@ class Building(SvgDrawing):
 
         if self.roof:
             ovh = _ROOF_OVERHANG
-            roof_path = draw.Path(fill=_ROOF_COLOR, stroke=_ROOF_EDGE,
-                                  stroke_width=2)
+            roof_path = draw.Path(fill=_ROOF_COLOR, stroke=_ROOF_EDGE, stroke_width=2)
             roof_path.M(self.x - ovh, building_top)
             roof_path.L(self.x + bw / 2, self.y + 3)
             roof_path.L(self.x + bw + ovh, building_top)
@@ -457,17 +512,23 @@ class Building(SvgDrawing):
 
         if self.plants:
             # Ground line
-            g.append(draw.Line(
-                self.x, building_bottom,
-                self.x + bw, building_bottom,
-                stroke="#8B7355", stroke_width=2,
-            ))
+            g.append(
+                draw.Line(
+                    self.x,
+                    building_bottom,
+                    self.x + bw,
+                    building_bottom,
+                    stroke="#8B7355",
+                    stroke_width=2,
+                )
+            )
             # Potted plants along the base
             n_plants = max(2, min(5, self.base // 2))
             step = bw / (n_plants + 1)
             for i in range(1, n_plants + 1):
-                _draw_potted_plant(g, self.x + i * step, building_bottom,
-                                   scale=self.plant_scale)
+                _draw_potted_plant(
+                    g, self.x + i * step, building_bottom, scale=self.plant_scale
+                )
 
         return g
 
