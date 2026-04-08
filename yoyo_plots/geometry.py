@@ -332,12 +332,14 @@ class RightTriangle(SvgDrawing):
         height: int,
         *,
         show_dimensions: bool = True,
+        show_hypotenuse_dimension: bool = False,
         cell_size: int = _CELL,
         dimension_labels: tuple[str, str] | tuple[str, str, str] | None = None,
     ):
         self.base = base
         self.height = height
         self.show_dimensions = show_dimensions
+        self.show_hypotenuse_dimension = show_hypotenuse_dimension
         self.cell_size = cell_size
         self.dimension_labels = dimension_labels
 
@@ -553,23 +555,24 @@ class RightTriangle(SvgDrawing):
                 )
             )
             # Hypotenuse (rotated along the diagonal)
-            mid_x = _sx(self.base / 2)
-            mid_y = _sy(self.height / 2)
-            angle = -math.degrees(math.atan2(self.height * cs, self.base * cs))
-            g.append(
-                draw.Text(
-                    hyp_label,
-                    _FONT_SIZE,
-                    mid_x + _DIM_OFFSET * 0.7 * math.sin(math.radians(-angle)),
-                    mid_y + _DIM_OFFSET * 0.7 * math.cos(math.radians(-angle)),
-                    text_anchor="middle",
-                    dominant_baseline="central",
-                    font_family=_FONT_FAMILY,
-                    fill=_LINE_COLOR,
-                    font_style=font_style,
-                    transform=f"rotate({angle},{mid_x},{mid_y})",
+            if self.show_hypotenuse_dimension:
+                mid_x = _sx(self.base / 2)
+                mid_y = _sy(self.height / 2)
+                angle = -math.degrees(math.atan2(self.height * cs, self.base * cs))
+                g.append(
+                    draw.Text(
+                        hyp_label,
+                        _FONT_SIZE,
+                        mid_x + _DIM_OFFSET * 0.7 * math.sin(math.radians(-angle)),
+                        mid_y + _DIM_OFFSET * 0.7 * math.cos(math.radians(-angle)),
+                        text_anchor="middle",
+                        dominant_baseline="central",
+                        font_family=_FONT_FAMILY,
+                        fill=_LINE_COLOR,
+                        font_style=font_style,
+                        transform=f"rotate({angle},{mid_x},{mid_y})",
+                    )
                 )
-            )
 
         return g
 
@@ -843,6 +846,7 @@ def draw_right_triangle(
     height: int,
     *,
     show_dimensions: bool = True,
+    show_hypotenuse_dimension: bool = False,
     pythagorean_squares: bool = False,
     base_color: str | None = "skyblue",
     height_color: str | None = "orange",
@@ -857,7 +861,9 @@ def draw_right_triangle(
     base, height : int
         Leg lengths.
     show_dimensions : bool
-        Label each side.
+        Label the two legs.
+    show_hypotenuse_dimension : bool
+        Label the hypotenuse as well.
     pythagorean_squares : bool
         Draw a square on each side.
     base_color, height_color, hypotenuse_color : str | None
@@ -869,6 +875,7 @@ def draw_right_triangle(
         base,
         height,
         show_dimensions=show_dimensions,
+        show_hypotenuse_dimension=show_hypotenuse_dimension,
         cell_size=cell_size,
         dimension_labels=dimension_labels,
     )
