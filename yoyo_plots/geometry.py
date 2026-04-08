@@ -554,27 +554,283 @@ class RightTriangle(SvgDrawing):
                     font_style=font_style,
                 )
             )
-            # Hypotenuse (rotated along the diagonal)
+            # Hypotenuse (horizontal, offset away from the triangle)
             if self.show_hypotenuse_dimension:
                 mid_x = _sx(self.base / 2)
                 mid_y = _sy(self.height / 2)
-                angle = -math.degrees(math.atan2(self.height * cs, self.base * cs))
+                # perpendicular outward offset (away from right-angle corner)
+                hyp_len = math.hypot(self.base * cs, self.height * cs)
+                nx = (self.height * cs) / hyp_len
+                ny = (self.base * cs) / hyp_len
                 g.append(
                     draw.Text(
                         hyp_label,
                         _FONT_SIZE,
-                        mid_x + _DIM_OFFSET * 0.7 * math.sin(math.radians(-angle)),
-                        mid_y + _DIM_OFFSET * 0.7 * math.cos(math.radians(-angle)),
+                        mid_x + _DIM_OFFSET * 0.7 * nx,
+                        mid_y - _DIM_OFFSET * 0.7 * ny,
                         text_anchor="middle",
                         dominant_baseline="central",
                         font_family=_FONT_FAMILY,
                         fill=_LINE_COLOR,
                         font_style=font_style,
-                        transform=f"rotate({angle},{mid_x},{mid_y})",
                     )
                 )
 
         return g
+
+    def pythagorean_proof(
+        self,
+        *,
+        labels: tuple[str, str, str] = ("a", "b", "c"),
+        triangle_color: str = "skyblue",
+        square_color: str = "mediumpurple",
+        cell_size: int | None = None,
+    ) -> str:
+        """Return an SVG of the rearrangement proof of the Pythagorean theorem.
+
+        A tilted square of side *c* (hypotenuse) is inscribed inside a
+        larger square of side *a + b*, with four congruent copies of the
+        right triangle filling the corners.
+
+        Parameters
+        ----------
+        labels : tuple[str, str, str]
+            Display labels for base, height and hypotenuse.
+        triangle_color : str
+            Fill colour for the four triangles.
+        square_color : str
+            Fill colour for the inner c² square.
+        cell_size : int | None
+            Override the instance *cell_size*.
+        """
+        cs = cell_size or self.cell_size
+        a, b = self.base, self.height
+        s = a + b  # outer square side
+        a_lbl, b_lbl, c_lbl = labels
+
+        margin = 40
+        total_w = s * cs + 2 * margin
+        total_h = s * cs + 2 * margin
+
+        dwg = draw.Drawing(total_w, total_h)
+        g = draw.Group()
+
+        def sx(x: float) -> float:
+            return margin + x * cs
+
+        def sy(y: float) -> float:
+            return margin + (s - y) * cs
+
+        # inner tilted square (c^2)
+        inner_pts = [(a, 0), (s, a), (b, s), (0, b)]
+        g.append(
+            draw.Lines(
+                *[c for p in inner_pts for c in (sx(p[0]), sy(p[1]))],
+                close=True,
+                fill=square_color,
+                opacity=_SQUARE_OPACITY,
+                stroke=square_color,
+                stroke_width=2,
+            )
+        )
+        # area label in centre
+        g.append(
+            draw.Text(
+                f"{c_lbl}²",
+                _FONT_SIZE + 4,
+                sx(s / 2),
+                sy(s / 2),
+                text_anchor="middle",
+                dominant_baseline="central",
+                font_family=_FONT_FAMILY,
+                fill=square_color,
+                font_weight="bold",
+                font_style="italic",
+            )
+        )
+
+        # four triangles
+        triangles = [
+            [(0, 0), (a, 0), (0, b)],
+            [(a, 0), (s, 0), (s, a)],
+            [(s, a), (s, s), (b, s)],
+            [(0, b), (b, s), (0, s)],
+        ]
+        for tri_pts in triangles:
+            g.append(
+                draw.Lines(
+                    *[c for p in tri_pts for c in (sx(p[0]), sy(p[1]))],
+                    close=True,
+                    fill=triangle_color,
+                    opacity=0.35,
+                    stroke=_LINE_COLOR,
+                    stroke_width=1,
+                )
+            )
+
+        # outer square border
+        g.append(
+            draw.Rectangle(
+                sx(0),
+                sy(s),
+                s * cs,
+                s * cs,
+                fill="none",
+                stroke=_LINE_COLOR,
+                stroke_width=2,
+            )
+        )
+
+        # right-angle marks at outer corners
+        ra = min(0.3, min(a, b) * 0.15)
+        corners = [
+            ((0, 0), (1, 0), (0, 1)),
+            ((s, 0), (-1, 0), (0, 1)),
+            ((s, s), (-1, 0), (0, -1)),
+            ((0, s), (1, 0), (0, -1)),
+        ]
+        for (cx, cy), (d1x, d1y), (d2x, d2y) in corners:
+            g.append(
+                draw.Lines(
+                    sx(cx + ra * d1x),
+                    sy(cy + ra * d1y),
+                    sx(cx + ra * d1x + ra * d2x),
+                    sy(cy + ra * d1y + ra * d2y),
+                    sx(cx + ra * d2x),
+                    sy(cy + ra * d2y),
+                    close=False,
+                    fill="none",
+                    stroke=_LINE_COLOR,
+                    stroke_width=1,
+                )
+            )
+
+        # edge labels (all four sides)
+        lbl_off = 18
+        font_kw: dict = dict(
+            font_family=_FONT_FAMILY,
+            font_style="italic",
+            fill=_LINE_COLOR,
+        )
+        # bottom: a | b
+        g.append(
+            draw.Text(
+                a_lbl, _FONT_SIZE, sx(a / 2), sy(0) + lbl_off,
+                text_anchor="middle", **font_kw,
+            )
+        )
+        g.append(
+            draw.Text(
+                b_lbl, _FONT_SIZE, sx(a + b / 2), sy(0) + lbl_off,
+                text_anchor="middle", **font_kw,
+            )
+        )
+        # left: b (bottom) | a (top)
+        g.append(
+            draw.Text(
+                b_lbl, _FONT_SIZE, sx(0) - lbl_off, sy(b / 2),
+                text_anchor="middle", dominant_baseline="central", **font_kw,
+            )
+        )
+        g.append(
+            draw.Text(
+                a_lbl, _FONT_SIZE, sx(0) - lbl_off, sy(b + a / 2),
+                text_anchor="middle", dominant_baseline="central", **font_kw,
+            )
+        )
+        # right: a (bottom) | b (top)
+        g.append(
+            draw.Text(
+                a_lbl, _FONT_SIZE, sx(s) + lbl_off, sy(a / 2),
+                text_anchor="middle", dominant_baseline="central", **font_kw,
+            )
+        )
+        g.append(
+            draw.Text(
+                b_lbl, _FONT_SIZE, sx(s) + lbl_off, sy(a + b / 2),
+                text_anchor="middle", dominant_baseline="central", **font_kw,
+            )
+        )
+        # top: b (left) | a (right)
+        g.append(
+            draw.Text(
+                b_lbl, _FONT_SIZE, sx(b / 2), sy(s) - lbl_off,
+                text_anchor="middle", **font_kw,
+            )
+        )
+        g.append(
+            draw.Text(
+                a_lbl, _FONT_SIZE, sx(b + a / 2), sy(s) - lbl_off,
+                text_anchor="middle", **font_kw,
+            )
+        )
+
+        # tick marks at the a/b boundary (all four sides)
+        tick = 5
+        # bottom
+        g.append(
+            draw.Line(
+                sx(a), sy(0) - tick, sx(a), sy(0) + tick,
+                stroke=_LINE_COLOR, stroke_width=1.5,
+            )
+        )
+        # left
+        g.append(
+            draw.Line(
+                sx(0) - tick, sy(b), sx(0) + tick, sy(b),
+                stroke=_LINE_COLOR, stroke_width=1.5,
+            )
+        )
+        # right
+        g.append(
+            draw.Line(
+                sx(s) - tick, sy(a), sx(s) + tick, sy(a),
+                stroke=_LINE_COLOR, stroke_width=1.5,
+            )
+        )
+        # top
+        g.append(
+            draw.Line(
+                sx(b), sy(s) - tick, sx(b), sy(s) + tick,
+                stroke=_LINE_COLOR, stroke_width=1.5,
+            )
+        )
+
+        # hypotenuse labels (c on each side of inner square)
+        hyp_off = 14
+        hyp_segments = [
+            ((a, 0), (s, a)),
+            ((s, a), (b, s)),
+            ((b, s), (0, b)),
+            ((0, b), (a, 0)),
+        ]
+        cx_inner = sx(s / 2)
+        cy_inner = sy(s / 2)
+        for (x1, y1), (x2, y2) in hyp_segments:
+            mx = (sx(x1) + sx(x2)) / 2
+            my = (sy(y1) + sy(y2)) / 2
+            dx = sx(x2) - sx(x1)
+            dy = sy(y2) - sy(y1)
+            seg_len = math.hypot(dx, dy)
+            # perpendicular unit vector
+            nx = -dy / seg_len
+            ny = dx / seg_len
+            # choose outward direction (away from inner-square centre)
+            if (mx + nx - cx_inner) ** 2 + (my + ny - cy_inner) ** 2 > \
+               (mx - nx - cx_inner) ** 2 + (my - ny - cy_inner) ** 2:
+                ox, oy = mx + nx * hyp_off, my + ny * hyp_off
+            else:
+                ox, oy = mx - nx * hyp_off, my - ny * hyp_off
+            g.append(
+                draw.Text(
+                    c_lbl, _FONT_SIZE, ox, oy,
+                    text_anchor="middle", dominant_baseline="central",
+                    **font_kw,
+                )
+            )
+
+        dwg.append(g)
+        return strip_svg_header(dwg.as_svg())
 
     def _draw_square_on_segment(
         self,
