@@ -8,6 +8,7 @@ import io
 
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import numpy as np
 from typing import Sequence
 
@@ -78,10 +79,17 @@ class FunctionPlot:
             self._ax.tick_params(labelsize=self._tck_fs)
             if show_grid:
                 self._ax.grid(True, linestyle="--", alpha=0.5)
-            # Flush x-axis; keep default y-bottom, small extra headroom on top
+            # Flush x-axis to data range
             self._ax.set_xlim(self._x.min(), self._x.max())
-            y_lo, y_hi = self._ax.get_ylim()
-            self._ax.set_ylim(y_lo, y_hi + (self._y.max() - self._y.min()) * 0.05)
+            # Y-axis: start at 0 (or below if data goes negative), headroom on top
+            y_data_lo = float(self._y.min())
+            y_data_hi = float(self._y.max())
+            y_lo = min(0, y_data_lo)
+            self._ax.set_ylim(y_lo, y_data_hi + (y_data_hi - y_lo) * 0.05)
+
+            # Integer ticks on both axes
+            self._ax.xaxis.set_major_locator(mticker.MultipleLocator(1))
+            self._ax.yaxis.set_major_locator(mticker.MultipleLocator(1))
 
         plt.close(self._fig)
 
