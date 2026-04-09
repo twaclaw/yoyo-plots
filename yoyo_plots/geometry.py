@@ -333,6 +333,7 @@ class RightTriangle(SvgDrawing):
         *,
         show_dimensions: bool = True,
         show_hypotenuse_dimension: bool = False,
+        all_labels_inside: bool = False,
         cell_size: int = _CELL,
         dimension_labels: tuple[str, str] | tuple[str, str, str] | None = None,
     ):
@@ -340,6 +341,7 @@ class RightTriangle(SvgDrawing):
         self.height = height
         self.show_dimensions = show_dimensions
         self.show_hypotenuse_dimension = show_hypotenuse_dimension
+        self.all_labels_inside = all_labels_inside
         self.cell_size = cell_size
         self.dimension_labels = dimension_labels
 
@@ -526,13 +528,15 @@ class RightTriangle(SvgDrawing):
         if self.show_dimensions:
             is_custom = self.dimension_labels is not None
             font_style = "italic" if is_custom else "normal"
+            inside = self.all_labels_inside
+            _off = _DIM_OFFSET * 0.35 if inside else _DIM_OFFSET
             # Base
             g.append(
                 draw.Text(
                     b_label,
                     _FONT_SIZE,
                     _sx(self.base / 2),
-                    _sy(0) + _DIM_OFFSET,
+                    _sy(0) - (4 if inside else -_DIM_OFFSET),
                     text_anchor="middle",
                     dominant_baseline="auto",
                     font_family=_FONT_FAMILY,
@@ -545,7 +549,7 @@ class RightTriangle(SvgDrawing):
                 draw.Text(
                     h_label,
                     _FONT_SIZE,
-                    _sx(0) - _DIM_OFFSET,
+                    _sx(0) + (_off if inside else -_off),
                     _sy(self.height / 2),
                     text_anchor="middle",
                     dominant_baseline="central",
@@ -554,20 +558,21 @@ class RightTriangle(SvgDrawing):
                     font_style=font_style,
                 )
             )
-            # Hypotenuse (horizontal, offset away from the triangle)
+            # Hypotenuse (horizontal)
             if self.show_hypotenuse_dimension:
                 mid_x = _sx(self.base / 2)
                 mid_y = _sy(self.height / 2)
-                # perpendicular outward offset (away from right-angle corner)
                 hyp_len = math.hypot(self.base * cs, self.height * cs)
                 nx = (self.height * cs) / hyp_len
                 ny = (self.base * cs) / hyp_len
+                sign = -1 if inside else 1
+                hyp_off = _DIM_OFFSET * 0.35 if inside else _DIM_OFFSET * 0.7
                 g.append(
                     draw.Text(
                         hyp_label,
                         _FONT_SIZE,
-                        mid_x + _DIM_OFFSET * 0.7 * nx,
-                        mid_y - _DIM_OFFSET * 0.7 * ny,
+                        mid_x + sign * hyp_off * nx,
+                        mid_y - sign * hyp_off * ny,
                         text_anchor="middle",
                         dominant_baseline="central",
                         font_family=_FONT_FAMILY,
@@ -583,6 +588,7 @@ class RightTriangle(SvgDrawing):
         *,
         labels: tuple[str, str, str] = ("a", "b", "c"),
         triangle_color: str = "skyblue",
+        triangle_colors: tuple[str, str, str, str] | None = None,
         square_color: str = "mediumpurple",
         cell_size: int | None = None,
     ) -> str:
@@ -597,7 +603,11 @@ class RightTriangle(SvgDrawing):
         labels : tuple[str, str, str]
             Display labels for base, height and hypotenuse.
         triangle_color : str
-            Fill colour for the four triangles.
+            Fill colour for all four triangles (used when
+            *triangle_colors* is not given).
+        triangle_colors : tuple[str, str, str, str] | None
+            Individual colours for C1 … C4 (clockwise from
+            upper-left in the outer square).
         square_color : str
             Fill colour for the inner c² square.
         cell_size : int | None
@@ -649,19 +659,23 @@ class RightTriangle(SvgDrawing):
             )
         )
 
-        # four triangles
+        # four triangles – draw order: C4, C3, C2, C1
         triangles = [
-            [(0, 0), (a, 0), (0, b)],
-            [(a, 0), (s, 0), (s, a)],
-            [(s, a), (s, s), (b, s)],
-            [(0, b), (b, s), (0, s)],
+            [(0, 0), (a, 0), (0, b)],       # C4 (bottom-left)
+            [(a, 0), (s, 0), (s, a)],        # C3 (bottom-right)
+            [(s, a), (s, s), (b, s)],         # C2 (top-right)
+            [(0, b), (b, s), (0, s)],         # C1 (top-left)
         ]
-        for tri_pts in triangles:
+        if triangle_colors is not None:
+            _tri_colors = [triangle_colors[i] for i in (3, 2, 1, 0)]
+        else:
+            _tri_colors = [triangle_color] * 4
+        for tri_pts, tc in zip(triangles, _tri_colors):
             g.append(
                 draw.Lines(
                     *[c for p in tri_pts for c in (sx(p[0]), sy(p[1]))],
                     close=True,
-                    fill=triangle_color,
+                    fill=tc,
                     opacity=0.35,
                     stroke=_LINE_COLOR,
                     stroke_width=1,
@@ -825,6 +839,236 @@ class RightTriangle(SvgDrawing):
                 draw.Text(
                     c_lbl, _FONT_SIZE, ox, oy,
                     text_anchor="middle", dominant_baseline="central",
+                    **font_kw,
+                )
+            )
+
+        dwg.append(g)
+        return strip_svg_header(dwg.as_svg())
+
+    def pythagorean_proof_rearranged(
+        self,
+        *,
+        labels: tuple[str, str, str] = ("a", "b", "c"),
+        triangle_color: str = "skyblue",
+        triangle_colors: tuple[str, str, str, str] | None = None,
+        square_color: str = "mediumpurple",
+        cell_size: int | None = None,
+    ) -> str:
+        """Return an SVG of the rearranged Pythagorean proof.
+
+        The same four right triangles are regrouped into two
+        rectangles, leaving two visible squares of area *a*² and *b*².
+        Pair this with :meth:`pythagorean_proof` to complete the
+        visual proof that *a*² + *b*² = *c*².
+
+        Parameters
+        ----------
+        labels : tuple[str, str, str]
+            Display labels for base, height and hypotenuse.
+        triangle_color : str
+            Single fill colour applied to all four triangles when
+            *triangle_colors* is not given.
+        triangle_colors : tuple[str, str, str, str] | None
+            Individual colours for C1 … C4 (clockwise from
+            upper-left in the *original* layout).
+        square_color : str
+            Fill colour for the *a*² and *b*² squares.
+        cell_size : int | None
+            Override the instance *cell_size*.
+        """
+        cs = cell_size or self.cell_size
+        a, b = self.base, self.height
+        s = a + b
+        a_lbl, b_lbl, c_lbl = labels
+
+        margin = 40
+        total = s * cs + 2 * margin
+
+        dwg = draw.Drawing(total, total)
+        g = draw.Group()
+
+        def sx(x: float) -> float:
+            return margin + x * cs
+
+        def sy(y: float) -> float:
+            return margin + (s - y) * cs
+
+        # coloured squares
+        for x0, y0, side, lbl in [
+            (0, 0, a, f"{a_lbl}²"),
+            (a, a, b, f"{b_lbl}²"),
+        ]:
+            g.append(
+                draw.Rectangle(
+                    sx(x0), sy(y0 + side), side * cs, side * cs,
+                    fill=square_color,
+                    opacity=_SQUARE_OPACITY,
+                    stroke=square_color,
+                    stroke_width=2,
+                )
+            )
+            g.append(
+                draw.Text(
+                    lbl, _FONT_SIZE + 4,
+                    sx(x0 + side / 2), sy(y0 + side / 2),
+                    text_anchor="middle",
+                    dominant_baseline="central",
+                    font_family=_FONT_FAMILY,
+                    fill=square_color,
+                    font_weight="bold",
+                    font_style="italic",
+                )
+            )
+
+        # C1–C4 labels refer to the *original* clockwise numbering.
+        rearranged: list[list[tuple[float, float]]] = [
+            [(a, 0), (s, a), (a, a)],        # C1  lower-right rect (shifted by (a, -b))
+            [(a, a), (a, s), (0, s)],        # C2  upper-left rect (shifted left by b)
+            [(a, 0), (s, 0), (s, a)],        # C3  lower-right rect (stays)
+            [(0, a), (a, a), (0, s)],        # C4  upper-left rect (shifted up by a)
+        ]
+        if triangle_colors is not None:
+            _colors = list(triangle_colors)
+        else:
+            _colors = [triangle_color] * 4
+        for tri_pts, tc in zip(rearranged, _colors):
+            g.append(
+                draw.Lines(
+                    *[coord for p in tri_pts
+                      for coord in (sx(p[0]), sy(p[1]))],
+                    close=True,
+                    fill=tc,
+                    opacity=0.35,
+                    stroke=_LINE_COLOR,
+                    stroke_width=1,
+                )
+            )
+
+        g.append(
+            draw.Rectangle(
+                sx(0), sy(s), s * cs, s * cs,
+                fill="none",
+                stroke=_LINE_COLOR,
+                stroke_width=2,
+            )
+        )
+
+        g.append(
+            draw.Line(
+                sx(a), sy(0), sx(a), sy(s),
+                stroke=_LINE_COLOR, stroke_width=1.5,
+            )
+        )
+        g.append(
+            draw.Line(
+                sx(0), sy(a), sx(s), sy(a),
+                stroke=_LINE_COLOR, stroke_width=1.5,
+            )
+        )
+
+        # ── right-angle marks ──
+        ra = min(0.3, min(a, b) * 0.15)
+        angle_marks = [
+            ((a, a), (1, 0), (0, -1)),     # C1 right-angle at (a,a)
+            ((a, s), (-1, 0), (0, -1)),    # C2 right-angle at (a,s)
+            ((s, 0), (-1, 0), (0, 1)),     # C3 right-angle at (s,0)
+            ((0, a), (1, 0), (0, 1)),      # C4 right-angle at (0,a)
+        ]
+        for (cx_, cy_), (d1x, d1y), (d2x, d2y) in angle_marks:
+            g.append(
+                draw.Lines(
+                    sx(cx_ + ra * d1x), sy(cy_ + ra * d1y),
+                    sx(cx_ + ra * d1x + ra * d2x),
+                    sy(cy_ + ra * d1y + ra * d2y),
+                    sx(cx_ + ra * d2x), sy(cy_ + ra * d2y),
+                    close=False,
+                    fill="none",
+                    stroke=_LINE_COLOR,
+                    stroke_width=1,
+                )
+            )
+
+        # edge labels
+        lbl_off = 18
+        font_kw: dict = dict(
+            font_family=_FONT_FAMILY,
+            font_style="italic",
+            fill=_LINE_COLOR,
+        )
+        # bottom
+        g.append(draw.Text(
+            a_lbl, _FONT_SIZE, sx(a / 2), sy(0) + lbl_off,
+            text_anchor="middle", **font_kw))
+        g.append(draw.Text(
+            b_lbl, _FONT_SIZE, sx(a + b / 2), sy(0) + lbl_off,
+            text_anchor="middle", **font_kw))
+        # top
+        g.append(draw.Text(
+            a_lbl, _FONT_SIZE, sx(a / 2), sy(s) - lbl_off,
+            text_anchor="middle", **font_kw))
+        g.append(draw.Text(
+            b_lbl, _FONT_SIZE, sx(a + b / 2), sy(s) - lbl_off,
+            text_anchor="middle", **font_kw))
+        # left
+        g.append(draw.Text(
+            a_lbl, _FONT_SIZE, sx(0) - lbl_off, sy(a / 2),
+            text_anchor="middle", dominant_baseline="central",
+            **font_kw))
+        g.append(draw.Text(
+            b_lbl, _FONT_SIZE, sx(0) - lbl_off, sy(a + b / 2),
+            text_anchor="middle", dominant_baseline="central",
+            **font_kw))
+        # right
+        g.append(draw.Text(
+            a_lbl, _FONT_SIZE, sx(s) + lbl_off, sy(a / 2),
+            text_anchor="middle", dominant_baseline="central",
+            **font_kw))
+        g.append(draw.Text(
+            b_lbl, _FONT_SIZE, sx(s) + lbl_off, sy(a + b / 2),
+            text_anchor="middle", dominant_baseline="central",
+            **font_kw))
+
+        # ── tick marks at x = a and y = a ──
+        tick = 5
+        g.append(draw.Line(
+            sx(a), sy(0) - tick, sx(a), sy(0) + tick,
+            stroke=_LINE_COLOR, stroke_width=1.5))
+        g.append(draw.Line(
+            sx(a), sy(s) - tick, sx(a), sy(s) + tick,
+            stroke=_LINE_COLOR, stroke_width=1.5))
+        g.append(draw.Line(
+            sx(0) - tick, sy(a), sx(0) + tick, sy(a),
+            stroke=_LINE_COLOR, stroke_width=1.5))
+        g.append(draw.Line(
+            sx(s) - tick, sy(a), sx(s) + tick, sy(a),
+            stroke=_LINE_COLOR, stroke_width=1.5))
+
+        # ── hypotenuse (c) labels — one per shared diagonal ──
+        hyp_off = 14
+        diagonals = [
+            # (endpoint1, endpoint2, reference-square-centre)
+            ((a, 0), (s, a), (a / 2, a / 2)),
+            ((a, a), (0, s), (a + b / 2, a + b / 2)),
+        ]
+        for (x1, y1), (x2, y2), (rx, ry) in diagonals:
+            mx = (sx(x1) + sx(x2)) / 2
+            my = (sy(y1) + sy(y2)) / 2
+            dx = sx(x2) - sx(x1)
+            dy = sy(y2) - sy(y1)
+            seg_len = math.hypot(dx, dy)
+            nx, ny_ = -dy / seg_len, dx / seg_len
+            rx_s, ry_s = sx(rx), sy(ry)
+            if (mx + nx - rx_s) ** 2 + (my + ny_ - ry_s) ** 2 < \
+               (mx - nx - rx_s) ** 2 + (my - ny_ - ry_s) ** 2:
+                ox, oy = mx + nx * hyp_off, my + ny_ * hyp_off
+            else:
+                ox, oy = mx - nx * hyp_off, my - ny_ * hyp_off
+            g.append(
+                draw.Text(
+                    c_lbl, _FONT_SIZE, ox, oy,
+                    text_anchor="middle",
+                    dominant_baseline="central",
                     **font_kw,
                 )
             )
@@ -1103,6 +1347,7 @@ def draw_right_triangle(
     *,
     show_dimensions: bool = True,
     show_hypotenuse_dimension: bool = False,
+    all_labels_inside: bool = False,
     pythagorean_squares: bool = False,
     base_color: str | None = "skyblue",
     height_color: str | None = "orange",
@@ -1120,6 +1365,8 @@ def draw_right_triangle(
         Label the two legs.
     show_hypotenuse_dimension : bool
         Label the hypotenuse as well.
+    all_labels_inside : bool
+        Place all dimension labels inside the triangle.
     pythagorean_squares : bool
         Draw a square on each side.
     base_color, height_color, hypotenuse_color : str | None
@@ -1132,6 +1379,7 @@ def draw_right_triangle(
         height,
         show_dimensions=show_dimensions,
         show_hypotenuse_dimension=show_hypotenuse_dimension,
+        all_labels_inside=all_labels_inside,
         cell_size=cell_size,
         dimension_labels=dimension_labels,
     )
