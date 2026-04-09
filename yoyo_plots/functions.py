@@ -5,6 +5,7 @@ functions.py – Plot a mathematical function with optional Riemann / Lebesgue r
 from __future__ import annotations
 
 import io
+import math
 
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
@@ -182,15 +183,17 @@ class FunctionPlot:
             if above[-1]:
                 ends = np.concatenate((ends, [len(above)]))
 
-            total_measure = 0.0
             segments_list: list[tuple[float, float]] = []
             for s_idx, e_idx in zip(starts, ends):
                 x_left = float(self._x[s_idx])
                 x_right = float(self._x[min(e_idx, len(self._x) - 1)])
+                if self.only_integers:
+                    # snap to integer boundaries (shrink inward)
+                    x_left = float(math.ceil(x_left))
+                    x_right = float(math.floor(x_right))
                 seg_w = x_right - x_left
                 if seg_w <= 0:
                     continue
-                total_measure += seg_w
                 segments_list.append((x_left, seg_w))
                 self._ax.add_patch(
                     mpatches.Rectangle(
@@ -205,22 +208,20 @@ class FunctionPlot:
                     )
                 )
 
-            if self.only_integers:
-                total_measure = float(round(total_measure))
-
-            # Place a single label in the widest segment
+            # Label each segment individually
             if rect.get("show_label", False) and segments_list:
-                m_str, h_str = self._fmt_dims(total_measure, strip_h)
-                best_x, best_w = max(segments_list, key=lambda t: t[1])
-                self._ax.text(
-                    best_x + best_w / 2,
-                    y_lo + strip_h / 2,
-                    f"{m_str}\u00d7{h_str}",
-                    ha="center",
-                    va="center",
-                    fontsize=max(7, self._tck_fs - 1),
-                    zorder=3,
-                )
+                for seg_x, seg_w in segments_list:
+                    seg_measure = float(round(seg_w)) if self.only_integers else seg_w
+                    m_str, h_str = self._fmt_dims(seg_measure, strip_h)
+                    self._ax.text(
+                        seg_x + seg_w / 2,
+                        y_lo + strip_h / 2,
+                        f"{m_str}\u00d7{h_str}",
+                        ha="center",
+                        va="center",
+                        fontsize=max(7, self._tck_fs - 1),
+                        zorder=3,
+                    )
         return self
 
     def add_markers(self, markers: dict[float, dict]) -> "FunctionPlot":
