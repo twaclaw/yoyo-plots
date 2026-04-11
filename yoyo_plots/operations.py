@@ -1,6 +1,7 @@
 from plotly.subplots import make_subplots
 
 from soroban import Soroban
+import math
 
 from .quantities import plot_quantity
 from .common import (
@@ -148,17 +149,20 @@ def draw_quantity_operation(
     return fig
 
 
-def soroban_column(value: int, font_size: int = 30, font_color: str = "black"):
+def soroban_column(
+    value: int,
+    font_size: int = 30,
+    font_color: str = "black",
+    single_value: bool = False,
+):
     """
     Uses the soroban_abacus library to show a single column of the abacus
     """
     import drawsvg as draw
 
-    s = Soroban(ncolumns=1)
+    ncolumns = math.ceil(math.log10(value + 1))
+    s = Soroban(ncolumns=ncolumns)
     s.from_decimal(value)
-
-    lower = value % 5
-    upper = value - lower
 
     s_svg = s.to_svg()
 
@@ -171,7 +175,19 @@ def soroban_column(value: int, font_size: int = 30, font_color: str = "black"):
     box_size = font_size * 2
     spacing = font_size * 0.5
 
-    total_w = w_soroban + 3 * box_size + 4 * spacing + 2 * font_size
+    if ncolumns == 1:
+        # upper + lower = value  →  3 boxes, 2 operators
+        total_w = w_soroban + 3 * box_size + 4 * spacing + 2 * font_size
+    else:
+        # col_n + col_(n-1) + … + col_1 = total  →  (n+1) boxes, n operators
+        n_boxes = ncolumns + 1
+        n_ops = ncolumns
+        total_w = (
+            w_soroban
+            + n_boxes * (box_size + spacing)
+            + n_ops * (spacing + font_size)
+            + spacing
+        )
     d = draw.Drawing(total_w, h_soroban, origin=(0, 0))
 
     if hasattr(s_svg, "elements"):
@@ -226,18 +242,41 @@ def soroban_column(value: int, font_size: int = 30, font_color: str = "black"):
             )
         )
 
-    draw_box(x_offset, text_y, box_size, upper)
-    x_offset += box_size + spacing
+    if ncolumns == 1 and not single_value:
+        lower = value % 5
+        upper = value - lower
 
-    draw_text(x_offset, text_y, "+")
-    x_offset += spacing
+        draw_box(x_offset, text_y, box_size, upper)
+        x_offset += box_size + spacing
 
-    draw_box(x_offset, text_y, box_size, lower)
-    x_offset += box_size + spacing
+        draw_text(x_offset, text_y, "+")
+        x_offset += spacing
 
-    draw_text(x_offset, text_y, "=")
-    x_offset += spacing
+        draw_box(x_offset, text_y, box_size, lower)
+        x_offset += box_size + spacing
 
-    draw_box(x_offset, text_y, box_size, value)
+        # result
+        draw_text(x_offset, text_y, "=")
+        x_offset += spacing
+
+        draw_box(x_offset, text_y, box_size, value)
+
+    else:
+        # col_n + col_(n-1) + … + col_1 = total
+        for col in range(ncolumns):
+            place = 10 ** (ncolumns - 1 - col)
+            digit = (value // place) % 10
+            col_value = digit * place
+
+            draw_box(x_offset, text_y, box_size, col_value)
+            x_offset += box_size + spacing
+
+            if not single_value:
+                op = "+" if col < ncolumns - 1 else "="
+                draw_text(x_offset, text_y, op)
+            x_offset += spacing
+
+        if not single_value:
+            draw_box(x_offset, text_y, box_size, value)
 
     return d
