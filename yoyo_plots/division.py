@@ -2,7 +2,7 @@ import math
 import os
 import drawsvg as draw
 
-from .common import SvgDrawing, strip_svg_header
+from .common import SvgDrawing, strip_svg_header, resolve_user_path, svg_to_data_uri
 
 def draw_card_back(x: float, y: float, width: float = 40, height: float = 60) -> draw.Group:
     """Draw a basic playing card back."""
@@ -126,12 +126,19 @@ class CardHolder(SvgDrawing):
                 
         curr_x = bottom_start_x
         if self.character_image:
-            if self.character_image.lstrip().startswith("<svg"):
-                pass
+            image_src = self.character_image
+            if not image_src.lstrip().startswith("<svg"):
+                if not image_src.startswith("data:"):
+                    resolved = resolve_user_path(image_src)
+                    if hasattr(resolved, "lower") and resolved.lower().endswith(".svg"):
+                        image_src = svg_to_data_uri(resolved)
+                    else:
+                        image_src = resolved
+
             g.append(draw.Image(
                 curr_x, bottom_start_y,
                 self.char_width, self.char_height,
-                self.character_image
+                image_src
             ))
             curr_x += self.char_width + self.spacing
             
