@@ -127,19 +127,42 @@ class CardHolder(SvgDrawing):
         curr_x = bottom_start_x
         if self.character_image:
             image_src = self.character_image
-            if not image_src.lstrip().startswith("<svg"):
-                if not image_src.startswith("data:"):
-                    resolved = resolve_user_path(image_src)
-                    if hasattr(resolved, "lower") and resolved.lower().endswith(".svg"):
-                        image_src = svg_to_data_uri(resolved)
+            is_svg = False
+            
+            if image_src.lstrip().startswith("<svg"):
+                is_svg = True
+                svg_content = image_src
+            elif not image_src.startswith("data:"):
+                resolved = resolve_user_path(image_src)
+                if hasattr(resolved, "lower") and resolved.lower().endswith(".svg"):
+                    import os
+                    if os.path.exists(resolved):
+                        with open(resolved, "r", encoding="utf-8") as f:
+                            svg_content = f.read()
+                        is_svg = True
                     else:
                         image_src = resolved
+                else:
+                    image_src = resolved
 
-            g.append(draw.Image(
-                curr_x, bottom_start_y,
-                self.char_width, self.char_height,
-                image_src
-            ))
+            if is_svg:
+                import re
+                svg_clean = re.sub(r"<\?xml[^>]*\?>", "", svg_content)
+                svg_clean = re.sub(r"<!DOCTYPE[^>]*>", "", svg_clean)
+                viewbox_match = re.search(r"<svg[^>]*\sviewBox=[\"\']([^\"\']+)[\"\']", svg_clean)
+                viewbox_attr = f' viewBox="{viewbox_match.group(1)}"' if viewbox_match else ""
+                xmlns_matches = re.findall(r"(xmlns(?::\w+)?=[\"\'][^\"\']+[\"\'])", svg_clean.split(">", 1)[0])
+                xmlns_str = " ".join(xmlns_matches)
+                inner = re.sub(r"^\s*<svg[^>]*>", "", svg_clean.strip())
+                inner = re.sub(r"</svg>\s*$", "", inner)
+                wrapped = f'<svg x="{curr_x}" y="{bottom_start_y}" width="{self.char_width}" height="{self.char_height}"{viewbox_attr} {xmlns_str}>{inner}</svg>'
+                g.append(draw.Raw(wrapped))
+            else:
+                g.append(draw.Image(
+                    curr_x, bottom_start_y,
+                    self.char_width, self.char_height,
+                    image_src
+                ))
             curr_x += self.char_width + self.spacing
             
         if self.draw_number:
