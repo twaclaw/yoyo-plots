@@ -346,6 +346,10 @@ class CardGame(SvgDrawing):
             curr_x = bot_start_x
             for h, (hw, hh) in zip(self.holders, holder_dims):
                 hg = draw.Group(transform=f"translate({curr_x}, {bot_start_y})")
+                hg.append(h.to_group())
+                g.append(hg)
+                curr_x += hw + self.spacing
+
         return g
 
 
