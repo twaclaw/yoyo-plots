@@ -364,12 +364,23 @@ class Pizza(SvgDrawing):
         radius: float = 100,
         flavour: str = "margherita",
         division_color: str = "white",
+        draw_fraction: bool = False,
+        fraction_num: int | None = None,
+        fraction_den: int | None = None,
+        font_size: int = 36,
+        font_color: str = "black",
     ):
         self.numerator = numerator
         self.denominator = denominator
         self.radius = radius
         self.flavour = flavour
         self.division_color = division_color
+
+        self.draw_fraction = draw_fraction
+        self.fraction_num = fraction_num
+        self.fraction_den = fraction_den
+        self.font_size = font_size
+        self.font_color = font_color
 
         # Colors for the flavours
         self.flavours = {
@@ -380,15 +391,25 @@ class Pizza(SvgDrawing):
         }
 
     def get_svg_dimensions(self) -> tuple[float, float]:
-        size = self.radius * 2 + 10  # 5px padding on each side
-        return size, size
+        pizza_size = self.radius * 2 + 10  # 5px padding on each side
+        if not self.draw_fraction:
+            return pizza_size, pizza_size
+
+        box_sz = self.font_size * 1.5
+        fraction_h = box_sz * 2 + 20  # 10px spacing around the central line
+
+        total_w = pizza_size + 20 + box_sz  # 20px spacing between pizza and fraction
+        total_h = max(pizza_size, fraction_h)
+        return total_w, total_h
 
     def to_group(self, **kwargs) -> draw.Group:
-        size, _ = self.get_svg_dimensions()
+        total_w, total_h = self.get_svg_dimensions()
         g = draw.Group()
 
-        # Center of the drawing
-        cx, cy = size / 2, size / 2
+        pizza_size = self.radius * 2 + 10
+        # Center of the drawing for the pizza
+        cx = pizza_size / 2
+        cy = total_h / 2
 
         flavour_color = self.flavours.get(
             self.flavour.lower(), self.flavours["margherita"]
@@ -404,7 +425,6 @@ class Pizza(SvgDrawing):
         angle_per_piece = 360.0 / self.denominator
         start_angle = -90
 
-        # Draw textures like herbs or pepperoni
         def add_texture(group, path_shape, texture_type):
             clip_id = f"clip-{id(self)}-{id(path_shape)}"
             clip = draw.ClipPath(id=clip_id)
@@ -417,7 +437,6 @@ class Pizza(SvgDrawing):
 
             rng = random.Random(hash(self.flavour) + self.numerator + self.denominator)
 
-            # Universal: Crust edge (drawn using thick strokes under the clip area boundary)
             texture_g.append(
                 draw.Circle(
                     cx,
@@ -668,5 +687,80 @@ class Pizza(SvgDrawing):
                 clip_path.Z()
 
                 add_texture(g, clip_path, self.flavour.lower())
+
+        if self.draw_fraction:
+            box_sz = self.font_size * 1.5
+            frac_x = pizza_size + 20 + box_sz / 2
+
+            # top box
+            g.append(
+                draw.Rectangle(
+                    frac_x - box_sz / 2,
+                    cy - 10 - box_sz,
+                    box_sz,
+                    box_sz,
+                    fill="none",
+                    stroke="black",
+                    stroke_width=2,
+                )
+            )
+
+            # bottom box
+            g.append(
+                draw.Rectangle(
+                    frac_x - box_sz / 2,
+                    cy + 10,
+                    box_sz,
+                    box_sz,
+                    fill="none",
+                    stroke="black",
+                    stroke_width=2,
+                )
+            )
+
+            # Line
+            g.append(
+                draw.Line(
+                    frac_x - box_sz / 2 - 5,
+                    cy,
+                    frac_x + box_sz / 2 + 5,
+                    cy,
+                    stroke="black",
+                    stroke_width=2,
+                )
+            )
+
+            if self.font_color != "white":
+                num_v = (
+                    self.numerator if self.fraction_num is None else self.fraction_num
+                )
+                den_v = (
+                    self.denominator if self.fraction_den is None else self.fraction_den
+                )
+
+                g.append(
+                    draw.Text(
+                        str(num_v),
+                        self.font_size,
+                        frac_x,
+                        cy - 10 - box_sz / 2,
+                        font_family="Comic Sans MS, Comic Sans, cursive",
+                        center=True,
+                        dominant_baseline="middle",
+                        fill=self.font_color,
+                    )
+                )
+                g.append(
+                    draw.Text(
+                        str(den_v),
+                        self.font_size,
+                        frac_x,
+                        cy + 10 + box_sz / 2,
+                        font_family="Comic Sans MS, Comic Sans, cursive",
+                        center=True,
+                        dominant_baseline="middle",
+                        fill=self.font_color,
+                    )
+                )
 
         return g
