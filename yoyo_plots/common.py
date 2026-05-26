@@ -1,6 +1,7 @@
 import base64
 import math
 import os
+import re
 import inspect
 
 MODULE_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -124,6 +125,59 @@ def strip_svg_header(svg_str: str) -> str:
     return svg_str[start:] if start > 0 else svg_str
 
 
+def embed_svg_image(source: str, x: float, y: float, width: float, height: float):
+    """Embed an SVG or raster image at the given position and size.
+
+    Handles three source types transparently:
+
+    * **Inline SVG string** – injected as a nested ``<svg>`` element so it
+      stays fully vector and inherits no raster blurriness.
+    * **File path** – resolved with :func:`resolve_user_path`.  ``.svg``
+      files are read and inlined; other formats become a ``draw.Image``.
+    * **``data:`` URI** – passed straight through to ``draw.Image``.
+
+    Returns a ``drawsvg.Raw`` (SVG) or ``drawsvg.Image`` (raster/data-URI).
+    """
+    import drawsvg as draw
+
+    is_svg = False
+    svg_content = ""
+    image_src = source
+
+    if source.lstrip().startswith("<svg"):
+        is_svg = True
+        svg_content = source
+    elif not source.startswith("data:"):
+        resolved = resolve_user_path(source)
+        if resolved.lower().endswith(".svg") and os.path.exists(resolved):
+            with open(resolved, "r", encoding="utf-8") as fh:
+                svg_content = fh.read()
+            is_svg = True
+        else:
+            image_src = resolved
+
+    if is_svg:
+        svg_clean = re.sub(r"<\?xml[^>]*\?>", "", svg_content)
+        svg_clean = re.sub(r"<!DOCTYPE[^>]*>", "", svg_clean)
+        viewbox_match = re.search(
+            r"<svg[^>]*\sviewBox=[\"\']([^\"\']+)[\"\']", svg_clean
+        )
+        viewbox_attr = f' viewBox="{viewbox_match.group(1)}"' if viewbox_match else ""
+        xmlns_matches = re.findall(
+            r"(xmlns(?::\w+)?=[\"\'][^\"\']+[\"\'])", svg_clean.split(">", 1)[0]
+        )
+        xmlns_str = " ".join(xmlns_matches)
+        inner = re.sub(r"^\s*<svg[^>]*>", "", svg_clean.strip())
+        inner = re.sub(r"</svg>\s*$", "", inner)
+        wrapped = (
+            f'<svg x="{x}" y="{y}" width="{width}" height="{height}"'
+            f"{viewbox_attr} {xmlns_str}>{inner}</svg>"
+        )
+        return draw.Raw(wrapped)
+
+    return draw.Image(x, y, width, height, image_src)
+
+
 class SvgDrawing:
     """Base class for objects that render themselves as SVG via drawsvg.
 
@@ -177,7 +231,7 @@ class VectorDisplay:
 
 def display_vector(fig):
     """
-    This is inntended mainly for Quarto, that internally uses a Jupyter-like notebook.
+    This is intended mainly for Quarto, that internally uses a Jupyter-like notebook.
     """
     from IPython.display import display
 

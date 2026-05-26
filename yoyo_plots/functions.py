@@ -252,7 +252,8 @@ class FunctionPlot:
 
             # marker dot
             self._ax.plot(
-                x_val, y_val,
+                x_val,
+                y_val,
                 "o",
                 color=color,
                 markersize=8,
@@ -354,3 +355,359 @@ class FunctionPlot:
         w_s = int(w) if w == int(w) else round(w, 2)
         h_s = int(h) if h == int(h) else round(h, 2)
         return w_s, h_s
+
+
+import drawsvg as draw
+
+from .common import SvgDrawing, embed_svg_image
+
+_FONT = "Comic Sans MS, Comic Sans, cursive"
+_ARROW_COLOR = "#444"
+_ARROW_HEAD_LEN = 12
+_ARROW_HEAD_WIDTH = 5
+
+
+def _is_svg(source: str) -> bool:
+    """Return ``True`` if *source* is an inline SVG, an ``svg+xml`` data URI,
+    or a path ending in ``.svg``.  Everything else is treated as a plain
+    text label.
+    """
+    s = source.strip()
+    return (
+        s.startswith("<svg")
+        or s.startswith("data:image/svg+xml")
+        or s.lower().endswith(".svg")
+    )
+
+
+class _MemberRef:
+    """A reference to one element inside a :class:`Set`.
+
+    Returned by ``Set[index]`` or ``Set["label"]``.  Pass these directly
+    as the endpoints of :class:`CayleyDiagram` mappings — no global
+    variables needed.
+    """
+
+    __slots__ = ("_set", "index")
+
+    def __init__(self, set_: "Set", index: int) -> None:
+        self._set = set_
+        self.index = index
+
+    @property
+    def content(self) -> str:
+        """The raw string stored for this member."""
+        return self._set._members[self.index]
+
+    def __repr__(self) -> str:
+        return f"<MemberRef [{self.index}] {self.content!r}>"
+
+
+class Set(SvgDrawing):
+    """A mathematical set rendered as a labelled oval.
+
+    Each element is a plain **string** — either a text label *or* an SVG
+    source (path ending in ``.svg``, inline ``<svg>…</svg>`` string, or
+    ``data:image/svg+xml`` URI).  The two roles are mutually exclusive per
+    element; raster image formats are not supported.
+
+    Access elements via subscript to build :class:`CayleyDiagram` mappings::
+
+        A = Set(["a₁", "a₂", "a₃"], label="A")
+        B = Set(["b₁", "b₂"],        label="B")
+
+        diagram = CayleyDiagram(
+            sets=[A, B],
+            mappings=[(A["a₁"], B["b₁"]), (A["a₂"], B["b₁"]), (A["a₃"], B["b₂"])],
+        )
+
+    Parameters
+    ----------
+    members : list[str]
+        Elements of the set, displayed top-to-bottom.
+    label : str | None
+        Optional set name shown at the top of the oval.
+    padding : float
+        Extra space between the content and the oval edge.
+    item_spacing : float
+        Vertical gap between consecutive members.
+    img_size : float
+        Width = height for image thumbnails.
+    font_size : int
+        Font size for all text.
+    """
+
+    def __init__(
+        self,
+        members: list[str],
+        label: str | None = None,
+        *,
+        padding: float = 28,
+        item_spacing: float = 14,
+        img_size: float = 60,
+        font_size: int = 16,
+    ):
+        self._members = list(members)
+        self.label = label
+        self.padding = padding
+        self.item_spacing = item_spacing
+        self.img_size = img_size
+        self.font_size = font_size
+
+    def __getitem__(self, key: int | str) -> _MemberRef:
+        """Return a :class:`_MemberRef` for *key*.
+
+        Parameters
+        ----------
+        key : int
+            Zero-based position.
+        key : str
+            Member string value (first match wins).
+        """
+        if isinstance(key, int):
+            if not 0 <= key < len(self._members):
+                raise IndexError(key)
+            return _MemberRef(self, key)
+        try:
+            return _MemberRef(self, self._members.index(key))
+        except ValueError:
+            raise KeyError(key) from None
+
+    def __len__(self) -> int:
+        return len(self._members)
+
+    def _member_size(self, content: str) -> tuple[float, float]:
+        """``(content_width, content_height)`` for one member string."""
+        if _is_svg(content):
+            return self.img_size, self.img_size
+        return len(content) * self.font_size * 0.6, self.font_size * 1.2
+
+    def get_layout(self) -> tuple[float, float, list[tuple[float, float, float]]]:
+        """Compute the oval dimensions and each member's centre.
+
+        Returns
+        -------
+        set_w, set_h : float
+            Bounding box of the oval.
+        member_data : list of ``(cx, cy, mw)``
+            One tuple per member in the same order as *members*.
+            *cx* is always ``set_w / 2`` (members are centred horizontally).
+        """
+        sizes = [self._member_size(m) for m in self._members]
+
+        max_content_w = max((mw for mw, _ in sizes), default=0.0)
+        label_w = len(self.label) * self.font_size * 0.6 if self.label else 0.0
+        set_w = max(max_content_w, label_w) + self.padding * 4
+
+        curr_y = self.padding
+        if self.label:
+            curr_y += self.font_size * 1.5 + self.item_spacing * 0.5
+
+        member_data: list[tuple[float, float, float]] = []
+        for mw, mh in sizes:
+            cy = curr_y + mh / 2
+            member_data.append((set_w / 2, cy, mw))
+            curr_y = cy + mh / 2 + self.item_spacing
+
+        set_h = curr_y - self.item_spacing + self.padding
+        return set_w, set_h, member_data
+
+    def get_svg_dimensions(self) -> tuple[float, float]:
+        w, h, _ = self.get_layout()
+        return w, h
+
+    def to_group(self, **kwargs) -> draw.Group:
+        set_w, set_h, member_data = self.get_layout()
+        g = draw.Group()
+
+        # Background oval
+        g.append(
+            draw.Ellipse(
+                set_w / 2,
+                set_h / 2,
+                rx=set_w / 2,
+                ry=set_h / 2,
+                fill="#f7f7fa",
+                stroke="#333",
+                stroke_width=2,
+            )
+        )
+
+        # Optional set label
+        if self.label:
+            g.append(
+                draw.Text(
+                    self.label,
+                    self.font_size,
+                    set_w / 2,
+                    self.padding * 0.65 + self.font_size / 2,
+                    font_family=_FONT,
+                    font_weight="bold",
+                    text_anchor="middle",
+                    dominant_baseline="middle",
+                    fill="#333",
+                )
+            )
+
+        # Each member is either an image or a text label — never both.
+        for content, (cx, cy, _) in zip(self._members, member_data):
+            if _is_svg(content):
+                g.append(
+                    embed_svg_image(
+                        content,
+                        cx - self.img_size / 2,
+                        cy - self.img_size / 2,
+                        self.img_size,
+                        self.img_size,
+                    )
+                )
+            else:
+                g.append(
+                    draw.Text(
+                        content,
+                        self.font_size,
+                        cx,
+                        cy,
+                        font_family=_FONT,
+                        text_anchor="middle",
+                        dominant_baseline="middle",
+                        fill="#333",
+                    )
+                )
+
+        return g
+
+
+class CayleyDiagram(SvgDrawing):
+    """Function mapping diagram between two or more :class:`Set` s.
+
+    Sets are laid out left-to-right.  Arrows connect mapped members across
+    sets, departing from and arriving at the member content (drawn on top of
+    the ovals so they remain visible where they cross the oval stroke).
+
+    Obtain member references via ``set_obj[index]`` or ``set_obj["label"]``::
+
+        Fruits = Set(["apple", "banana", "cherry"], label="Fruits")
+        Vars   = Set(["x", "y"],                   label="Variables")
+
+        diagram = CayleyDiagram(
+            sets=[Fruits, Vars],
+            mappings=[
+                (Fruits["apple"],  Vars["x"]),
+                (Fruits["banana"], Vars["y"]),
+                (Fruits["cherry"], Vars["x"]),
+            ],
+        )
+
+    For a bijection, a comprehension keeps things concise::
+
+        G = Set(["α", "β", "γ", "δ"], label="Greek")
+        L = Set(["a", "b", "c", "d"], label="Latin")
+        diagram = CayleyDiagram(sets=[G, L], mappings=[(G[i], L[i]) for i in range(4)])
+
+    Parameters
+    ----------
+    sets : list[Set]
+        Two or more sets in order (domain → … → codomain).
+    mappings : list of ``(_MemberRef, _MemberRef)`` pairs
+        Each pair connects one element of a source set to one element of a
+        target set.
+    spacing_x : float
+        Horizontal gap between consecutive ovals.
+    arrow_image : str | None
+        Optional image (file path, inline ``<svg>`` string, or ``data:`` URI)
+        drawn on top of every mapping arrow.  When ``None`` (default) the
+        arrows are rendered as plain curves.  SVG sources are inlined via
+        :func:`yoyo_plots.common.embed_svg_image` so they remain vector and
+        render correctly inside Quarto documents.
+    arrow_image_size : float
+        Width = height of the per-arrow image when *arrow_image* is provided.
+    arrow_image_offset_y : float
+        Vertical displacement of the image relative to the arrow's midpoint.
+        Negative values lift the image *above* the line; ``0`` (default)
+        centres it on the line.
+    """
+
+    def __init__(
+        self,
+        sets: list[Set],
+        mappings: list[tuple[_MemberRef, _MemberRef]],
+        *,
+        spacing_x: float = 140,
+        arrow_image: str | None = None,
+        arrow_image_size: float = 24,
+        arrow_image_offset_y: float = 0,
+    ):
+        self.sets = sets
+        self.mappings = mappings
+        self.spacing_x = spacing_x
+        self.arrow_image = arrow_image
+        self.arrow_image_size = arrow_image_size
+        self.arrow_image_offset_y = arrow_image_offset_y
+
+    def get_svg_dimensions(self) -> tuple[float, float]:
+        total_w = sum(s.get_svg_dimensions()[0] for s in self.sets)
+        total_w += self.spacing_x * max(len(self.sets) - 1, 0)
+        total_h = max((s.get_svg_dimensions()[1] for s in self.sets), default=0.0)
+        return total_w, total_h
+
+    def to_group(self, **_kwargs) -> draw.Group:
+        g = draw.Group()
+        _, total_h = self.get_svg_dimensions()
+
+        # Key: (id(set_instance), member_index)
+        # Value: (global_cy, set_x_offset, set_w, content_w)
+        member_info: dict[tuple[int, int], tuple[float, float, float, float]] = {}
+        curr_x = 0.0
+
+        for s in self.sets:
+            sw, sh, member_data = s.get_layout()
+            off_y = (total_h - sh) / 2
+
+            sg = draw.Group(transform=f"translate({curr_x},{off_y})")
+            sg.append(s.to_group())
+            g.append(sg)
+
+            for i, (_, local_cy, mw) in enumerate(member_data):
+                member_info[(id(s), i)] = (off_y + local_cy, curr_x, sw, mw)
+
+            curr_x += sw + self.spacing_x
+
+        # Arrow tail = right edge of source content  (set_cx + mw/2)
+        # Arrow head = left  edge of target content  (set_cx - mw/2)
+        for from_ref, to_ref in self.mappings:
+            key_f = (id(from_ref._set), from_ref.index)
+            key_t = (id(to_ref._set), to_ref.index)
+            if key_f not in member_info or key_t not in member_info:
+                continue
+
+            gfy, off_x_f, sw_f, mw_f = member_info[key_f]
+            gty, off_x_t, sw_t, mw_t = member_info[key_t]
+
+            fx, fy = off_x_f + sw_f / 2 + mw_f / 2, gfy
+            tx, ty = off_x_t + sw_t / 2 - mw_t / 2, gty
+
+            cp = (tx - fx) * 0.45
+            path = draw.Path(fill="none", stroke=_ARROW_COLOR, stroke_width=2)
+            path.M(fx, fy)
+            path.C(fx + cp, fy, tx - cp, ty, tx - _ARROW_HEAD_LEN + 2, ty)
+            g.append(path)
+
+            head = draw.Path(fill=_ARROW_COLOR, stroke="none")
+            head.M(tx, ty)
+            head.L(tx - _ARROW_HEAD_LEN, ty - _ARROW_HEAD_WIDTH)
+            head.L(tx - _ARROW_HEAD_LEN, ty + _ARROW_HEAD_WIDTH)
+            head.Z()
+            g.append(head)
+
+            if self.arrow_image:
+                # Midpoint of a cubic Bézier with horizontal control handles
+                # equals the average of the endpoints.
+                mx = (fx + tx) / 2
+                my = (fy + ty) / 2 + self.arrow_image_offset_y
+                s = self.arrow_image_size
+                g.append(
+                    embed_svg_image(self.arrow_image, mx - s / 2, my - s / 2, s, s)
+                )
+
+        return g

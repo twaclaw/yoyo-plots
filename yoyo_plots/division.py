@@ -1,7 +1,11 @@
 import math
+import random
+
 import drawsvg as draw
 
-from .common import SvgDrawing, resolve_user_path
+from .common import SvgDrawing, embed_svg_image
+
+_FONT = "Comic Sans MS, Comic Sans, cursive"
 
 
 def draw_card_back(
@@ -91,64 +95,50 @@ class CardHolder(SvgDrawing):
         self.spacing = 10
         self.folded_offset = 15
 
-    def get_svg_dimensions(self) -> tuple[float, float]:
+    def _layout(self) -> tuple[float, float, float, float, float, float]:
+        """Compute card-stack and bottom-section dimensions.
+
+        Returns ``(w_cards, h_cards, w_bottom, h_bottom, total_w, total_h)``.
+        Called by both :meth:`get_svg_dimensions` and :meth:`to_group` so the
+        calculation is never duplicated.
+        """
         if self.number == 0:
-            w_cards = 0
-            h_cards = 0
+            w_cards, h_cards = 0.0, 0.0
         elif self.fold_cards:
             w_cards = self.card_width + (self.number - 1) * self.folded_offset
             h_cards = self.card_height + (self.number - 1) * self.folded_offset
         else:
-            w_cards = (
-                self.number * self.card_width + max(0, self.number - 1) * self.spacing
-            )
+            w_cards = self.number * self.card_width + max(0, self.number - 1) * self.spacing
             h_cards = self.card_height
 
-        w_char = self.char_width if self.character_image else 0
-        h_char = self.char_height if self.character_image else 0
-        w_num = self.font_size * 1.5 if self.draw_number else 0
-        h_num = self.font_size if self.draw_number else 0
+        w_char = self.char_width if self.character_image else 0.0
+        h_char = self.char_height if self.character_image else 0.0
+        w_num = self.font_size * 1.5 if self.draw_number else 0.0
+        h_num = float(self.font_size) if self.draw_number else 0.0
 
         w_bottom = w_char + (self.spacing if w_char and w_num else 0) + w_num
         h_bottom = max(h_char, h_num)
 
         total_w = max(w_cards, w_bottom) + self.spacing * 2
+        gap = self.spacing if h_cards > 0 and h_bottom > 0 else 0
+        total_h = h_cards + gap + h_bottom + self.spacing * 2
 
-        spacing_between_rows = self.spacing if h_cards > 0 and h_bottom > 0 else 0
-        total_h = h_cards + spacing_between_rows + h_bottom + self.spacing * 2
+        return w_cards, h_cards, w_bottom, h_bottom, total_w, total_h
 
+    def get_svg_dimensions(self) -> tuple[float, float]:
+        _, _, _, _, total_w, total_h = self._layout()
         return total_w, total_h
 
     def to_group(self, **kwargs) -> draw.Group:
         g = draw.Group()
-        total_w, _ = self.get_svg_dimensions()
-
-        if self.number == 0:
-            w_cards = 0
-            h_cards = 0
-        elif self.fold_cards:
-            w_cards = self.card_width + (self.number - 1) * self.folded_offset
-            h_cards = self.card_height + (self.number - 1) * self.folded_offset
-        else:
-            w_cards = (
-                self.number * self.card_width + max(0, self.number - 1) * self.spacing
-            )
-            h_cards = self.card_height
-
-        w_char = self.char_width if self.character_image else 0
-        h_char = self.char_height if self.character_image else 0
-        w_num = self.font_size * 1.5 if self.draw_number else 0
-        h_num = self.font_size if self.draw_number else 0
-
-        w_bottom = w_char + (self.spacing if w_char and w_num else 0) + w_num
-        h_bottom = max(h_char, h_num)
+        w_cards, h_cards, w_bottom, h_bottom, total_w, _ = self._layout()
 
         cards_start_x = (total_w - w_cards) / 2
         cards_start_y = self.spacing
 
         bottom_start_x = (total_w - w_bottom) / 2
-        spacing_between_rows = self.spacing if h_cards > 0 and w_bottom > 0 else 0
-        bottom_start_y = self.spacing + h_cards + spacing_between_rows
+        gap = self.spacing if h_cards > 0 and h_bottom > 0 else 0
+        bottom_start_y = self.spacing + h_cards + gap
 
         if self.number > 0:
             for i in range(self.number):
@@ -167,62 +157,21 @@ class CardHolder(SvgDrawing):
 
         curr_x = bottom_start_x
         if self.character_image:
-            image_src = self.character_image
-            is_svg = False
-
-            if image_src.lstrip().startswith("<svg"):
-                is_svg = True
-                svg_content = image_src
-            elif not image_src.startswith("data:"):
-                resolved = resolve_user_path(image_src)
-                if hasattr(resolved, "lower") and resolved.lower().endswith(".svg"):
-                    import os
-
-                    if os.path.exists(resolved):
-                        with open(resolved, "r", encoding="utf-8") as f:
-                            svg_content = f.read()
-                        is_svg = True
-                    else:
-                        image_src = resolved
-                else:
-                    image_src = resolved
-
-            if is_svg:
-                import re
-
-                svg_clean = re.sub(r"<\?xml[^>]*\?>", "", svg_content)
-                svg_clean = re.sub(r"<!DOCTYPE[^>]*>", "", svg_clean)
-                viewbox_match = re.search(
-                    r"<svg[^>]*\sviewBox=[\"\']([^\"\']+)[\"\']", svg_clean
+            g.append(
+                embed_svg_image(
+                    self.character_image,
+                    curr_x,
+                    bottom_start_y,
+                    self.char_width,
+                    self.char_height,
                 )
-                viewbox_attr = (
-                    f' viewBox="{viewbox_match.group(1)}"' if viewbox_match else ""
-                )
-                xmlns_matches = re.findall(
-                    r"(xmlns(?::\w+)?=[\"\'][^\"\']+[\"\'])", svg_clean.split(">", 1)[0]
-                )
-                xmlns_str = " ".join(xmlns_matches)
-                inner = re.sub(r"^\s*<svg[^>]*>", "", svg_clean.strip())
-                inner = re.sub(r"</svg>\s*$", "", inner)
-                wrapped = f'<svg x="{curr_x}" y="{bottom_start_y}" width="{self.char_width}" height="{self.char_height}"{viewbox_attr} {xmlns_str}>{inner}</svg>'
-                g.append(draw.Raw(wrapped))
-            else:
-                g.append(
-                    draw.Image(
-                        curr_x,
-                        bottom_start_y,
-                        self.char_width,
-                        self.char_height,
-                        image_src,
-                    )
-                )
+            )
             curr_x += self.char_width + self.spacing
 
         if self.draw_number:
-            text_x = curr_x + w_num / 2
-            text_y = bottom_start_y + h_bottom / 2
-
             box_sz = self.font_size * 1.5
+            text_x = curr_x + box_sz / 2
+            text_y = bottom_start_y + h_bottom / 2
             g.append(
                 draw.Rectangle(
                     text_x - box_sz / 2,
@@ -242,7 +191,7 @@ class CardHolder(SvgDrawing):
                         self.font_size,
                         text_x,
                         text_y,
-                        font_family="Comic Sans MS, Comic Sans, cursive",
+                        font_family=_FONT,
                         center=True,
                         dominant_baseline="middle",
                         fill=self.font_color,
@@ -432,9 +381,6 @@ class Pizza(SvgDrawing):
             g.append(clip)
 
             texture_g = draw.Group(clip_path=f"url(#{clip_id})")
-
-            import random
-
             rng = random.Random(hash(self.flavour) + self.numerator + self.denominator)
 
             texture_g.append(
@@ -744,7 +690,7 @@ class Pizza(SvgDrawing):
                         self.font_size,
                         frac_x,
                         cy - 10 - box_sz / 2,
-                        font_family="Comic Sans MS, Comic Sans, cursive",
+                        font_family=_FONT,
                         center=True,
                         dominant_baseline="middle",
                         fill=self.font_color,
@@ -756,7 +702,7 @@ class Pizza(SvgDrawing):
                         self.font_size,
                         frac_x,
                         cy + 10 + box_sz / 2,
-                        font_family="Comic Sans MS, Comic Sans, cursive",
+                        font_family=_FONT,
                         center=True,
                         dominant_baseline="middle",
                         fill=self.font_color,
