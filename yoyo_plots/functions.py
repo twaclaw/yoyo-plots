@@ -527,7 +527,7 @@ class Set(SvgDrawing):
                 set_h / 2,
                 rx=set_w / 2,
                 ry=set_h / 2,
-                fill="#f7f7fa",
+                fill="white",
                 stroke="#333",
                 stroke_width=2,
             )

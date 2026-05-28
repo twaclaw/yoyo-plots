@@ -1,10 +1,33 @@
 import base64
+import itertools
 import math
 import os
 import re
 import inspect
 
 MODULE_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+_svg_embed_counter = itertools.count()
+
+
+def _uniquify_svg_ids(svg: str) -> str:
+    """Suffix every ``id`` (and its ``#`` references) with a per-call token.
+
+    Inlining the same SVG more than once (e.g. one icon on each arrow of a
+    Cayley diagram) otherwise produces duplicate element IDs, which breaks the
+    SVG→PDF converters Quarto uses.  Suffixing keeps each embed self-contained
+    without altering its appearance.
+    """
+    ids = set(re.findall(r'\bid="([^"]+)"', svg))
+    if not ids:
+        return svg
+    suffix = f"_e{next(_svg_embed_counter)}"
+    for the_id in ids:
+        esc = re.escape(the_id)
+        svg = re.sub(rf'(\bid=")({esc})(")', rf"\1\2{suffix}\3", svg)
+        svg = re.sub(rf"(url\(#){esc}(\))", rf"\1{the_id}{suffix}\2", svg)
+        svg = re.sub(rf'((?:xlink:)?href="#){esc}(")', rf'\1{the_id}{suffix}\2', svg)
+    return svg
 
 
 def pkg_asset(path: str) -> str:
@@ -169,6 +192,7 @@ def embed_svg_image(source: str, x: float, y: float, width: float, height: float
         xmlns_str = " ".join(xmlns_matches)
         inner = re.sub(r"^\s*<svg[^>]*>", "", svg_clean.strip())
         inner = re.sub(r"</svg>\s*$", "", inner)
+        inner = _uniquify_svg_ids(inner)
         wrapped = (
             f'<svg x="{x}" y="{y}" width="{width}" height="{height}"'
             f"{viewbox_attr} {xmlns_str}>{inner}</svg>"
