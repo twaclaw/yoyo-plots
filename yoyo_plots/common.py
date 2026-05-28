@@ -182,17 +182,28 @@ def embed_svg_image(source: str, x: float, y: float, width: float, height: float
     if is_svg:
         svg_clean = re.sub(r"<\?xml[^>]*\?>", "", svg_content)
         svg_clean = re.sub(r"<!DOCTYPE[^>]*>", "", svg_clean)
-        viewbox_match = re.search(
-            r"<svg[^>]*\sviewBox=[\"\']([^\"\']+)[\"\']", svg_clean
-        )
+
+        # Locate the root <svg …> opening tag explicitly.  Anything before it
+        # (e.g. an Inkscape "<!-- Created with … -->" banner) or after the
+        # final </svg> is preamble/trailer and must be dropped — otherwise the
+        # opening tag survives unstripped and the wrapped output has an
+        # unbalanced <svg>, which rsvg-convert rejects with
+        # "Premature end of data in tag svg".
+        open_match = re.search(r"<svg\b[^>]*>", svg_clean)
+        if open_match is None:
+            return draw.Image(x, y, width, height, image_src)
+        open_tag = open_match.group(0)
+
+        viewbox_match = re.search(r'\sviewBox=["\']([^"\']+)["\']', open_tag)
         viewbox_attr = f' viewBox="{viewbox_match.group(1)}"' if viewbox_match else ""
-        xmlns_matches = re.findall(
-            r"(xmlns(?::\w+)?=[\"\'][^\"\']+[\"\'])", svg_clean.split(">", 1)[0]
-        )
+        xmlns_matches = re.findall(r'(xmlns(?::\w+)?=["\'][^"\']+["\'])', open_tag)
         xmlns_str = " ".join(xmlns_matches)
-        inner = re.sub(r"^\s*<svg[^>]*>", "", svg_clean.strip())
-        inner = re.sub(r"</svg>\s*$", "", inner)
+
+        last_close = svg_clean.rfind("</svg>")
+        end = last_close if last_close != -1 else len(svg_clean)
+        inner = svg_clean[open_match.end():end]
         inner = _uniquify_svg_ids(inner)
+
         wrapped = (
             f'<svg x="{x}" y="{y}" width="{width}" height="{height}"'
             f"{viewbox_attr} {xmlns_str}>{inner}</svg>"
