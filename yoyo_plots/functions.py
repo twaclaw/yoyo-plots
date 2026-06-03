@@ -384,7 +384,7 @@ class _MemberRef:
     """A reference to one element inside a :class:`Set`.
 
     Returned by ``Set[index]`` or ``Set["label"]``.  Pass these directly
-    as the endpoints of :class:`CayleyDiagram` mappings — no global
+    as the endpoints of :class:`Mapping` mappings — no global
     variables needed.
     """
 
@@ -411,12 +411,12 @@ class Set(SvgDrawing):
     ``data:image/svg+xml`` URI).  The two roles are mutually exclusive per
     element; raster image formats are not supported.
 
-    Access elements via subscript to build :class:`CayleyDiagram` mappings::
+    Access elements via subscript to build :class:`Mapping` mappings::
 
         A = Set(["a₁", "a₂", "a₃"], label="A")
         B = Set(["b₁", "b₂"],        label="B")
 
-        diagram = CayleyDiagram(
+        diagram = Mapping(
             sets=[A, B],
             mappings=[(A["a₁"], B["b₁"]), (A["a₂"], B["b₁"]), (A["a₃"], B["b₂"])],
         )
@@ -578,7 +578,7 @@ class Set(SvgDrawing):
         return g
 
 
-class CayleyDiagram(SvgDrawing):
+class Mapping(SvgDrawing):
     """Function mapping diagram between two or more :class:`Set` s.
 
     Sets are laid out left-to-right.  Arrows connect mapped members across
@@ -590,7 +590,7 @@ class CayleyDiagram(SvgDrawing):
         Fruits = Set(["apple", "banana", "cherry"], label="Fruits")
         Vars   = Set(["x", "y"],                   label="Variables")
 
-        diagram = CayleyDiagram(
+        diagram = Mapping(
             sets=[Fruits, Vars],
             mappings=[
                 (Fruits["apple"],  Vars["x"]),
@@ -603,7 +603,7 @@ class CayleyDiagram(SvgDrawing):
 
         G = Set(["α", "β", "γ", "δ"], label="Greek")
         L = Set(["a", "b", "c", "d"], label="Latin")
-        diagram = CayleyDiagram(sets=[G, L], mappings=[(G[i], L[i]) for i in range(4)])
+        diagram = Mapping(sets=[G, L], mappings=[(G[i], L[i]) for i in range(4)])
 
     Parameters
     ----------
@@ -626,7 +626,25 @@ class CayleyDiagram(SvgDrawing):
         Vertical displacement of the image relative to the arrow's midpoint.
         Negative values lift the image *above* the line; ``0`` (default)
         centres it on the line.
+    arrow_label : str | None
+        Optional text drawn on top of every mapping arrow.  When ``None``
+        (default) no label is added.  Rendered at the arrow's midpoint, like
+        *arrow_image*.
+    arrow_label_size : float
+        Font size of the per-arrow label when *arrow_label* is provided.
+    arrow_label_offset_y : float
+        Vertical displacement of the label relative to the arrow's midpoint.
+        Negative values lift the label *above* the line; ``0`` (default)
+        centres it on the line.
+    arrow_direction : str
+        Where the arrow heads point:
+
+        * ``"left_to_right"`` (default) — head at the target member.
+        * ``"right_to_left"`` — head at the source member.
+        * ``"bidirectional"`` — a head at both ends.
     """
+
+    _ARROW_DIRECTIONS = ("left_to_right", "right_to_left", "bidirectional")
 
     def __init__(
         self,
@@ -637,19 +655,43 @@ class CayleyDiagram(SvgDrawing):
         arrow_image: str | None = None,
         arrow_image_size: float = 24,
         arrow_image_offset_y: float = 0,
+        arrow_label: str | None = None,
+        arrow_label_size: float = 14,
+        arrow_label_offset_y: float = 0,
+        arrow_direction: str = "left_to_right",
     ):
+        if arrow_direction not in self._ARROW_DIRECTIONS:
+            raise ValueError(
+                f"arrow_direction must be one of {self._ARROW_DIRECTIONS}, "
+                f"got {arrow_direction!r}"
+            )
         self.sets = sets
         self.mappings = mappings
         self.spacing_x = spacing_x
         self.arrow_image = arrow_image
         self.arrow_image_size = arrow_image_size
         self.arrow_image_offset_y = arrow_image_offset_y
+        self.arrow_label = arrow_label
+        self.arrow_label_size = arrow_label_size
+        self.arrow_label_offset_y = arrow_label_offset_y
+        self.arrow_direction = arrow_direction
 
     def get_svg_dimensions(self) -> tuple[float, float]:
         total_w = sum(s.get_svg_dimensions()[0] for s in self.sets)
         total_w += self.spacing_x * max(len(self.sets) - 1, 0)
         total_h = max((s.get_svg_dimensions()[1] for s in self.sets), default=0.0)
         return total_w, total_h
+
+    @staticmethod
+    def _add_arrow_head(g: draw.Group, px: float, py: float, *, pointing_right: bool):
+        """Append a filled triangular arrow head with its tip at ``(px, py)``."""
+        base_x = px - _ARROW_HEAD_LEN if pointing_right else px + _ARROW_HEAD_LEN
+        head = draw.Path(fill=_ARROW_COLOR, stroke="none")
+        head.M(px, py)
+        head.L(base_x, py - _ARROW_HEAD_WIDTH)
+        head.L(base_x, py + _ARROW_HEAD_WIDTH)
+        head.Z()
+        g.append(head)
 
     def to_group(self, **_kwargs) -> draw.Group:
         g = draw.Group()
@@ -687,18 +729,24 @@ class CayleyDiagram(SvgDrawing):
             fx, fy = off_x_f + sw_f / 2 + mw_f / 2, gfy
             tx, ty = off_x_t + sw_t / 2 - mw_t / 2, gty
 
-            cp = (tx - fx) * 0.45
+            head_at_source = self.arrow_direction in ("right_to_left", "bidirectional")
+            head_at_target = self.arrow_direction in ("left_to_right", "bidirectional")
+
+            # Pull the line ends in where a head sits so it doesn't poke through.
+            trim = _ARROW_HEAD_LEN - 2
+            start_x = fx + trim if head_at_source else fx
+            end_x = tx - trim if head_at_target else tx
+
+            cp = (end_x - start_x) * 0.45
             path = draw.Path(fill="none", stroke=_ARROW_COLOR, stroke_width=2)
-            path.M(fx, fy)
-            path.C(fx + cp, fy, tx - cp, ty, tx - _ARROW_HEAD_LEN + 2, ty)
+            path.M(start_x, fy)
+            path.C(start_x + cp, fy, end_x - cp, ty, end_x, ty)
             g.append(path)
 
-            head = draw.Path(fill=_ARROW_COLOR, stroke="none")
-            head.M(tx, ty)
-            head.L(tx - _ARROW_HEAD_LEN, ty - _ARROW_HEAD_WIDTH)
-            head.L(tx - _ARROW_HEAD_LEN, ty + _ARROW_HEAD_WIDTH)
-            head.Z()
-            g.append(head)
+            if head_at_target:
+                self._add_arrow_head(g, tx, ty, pointing_right=True)
+            if head_at_source:
+                self._add_arrow_head(g, fx, fy, pointing_right=False)
 
             if self.arrow_image:
                 # Midpoint of a cubic Bézier with horizontal control handles
@@ -708,6 +756,24 @@ class CayleyDiagram(SvgDrawing):
                 s = self.arrow_image_size
                 g.append(
                     embed_svg_image(self.arrow_image, mx - s / 2, my - s / 2, s, s)
+                )
+
+            if self.arrow_label:
+                # Midpoint of a cubic Bézier with horizontal control handles
+                # equals the average of the endpoints.
+                mx = (fx + tx) / 2
+                my = (fy + ty) / 2 + self.arrow_label_offset_y
+                g.append(
+                    draw.Text(
+                        self.arrow_label,
+                        self.arrow_label_size,
+                        mx,
+                        my,
+                        font_family=_FONT,
+                        text_anchor="middle",
+                        dominant_baseline="middle",
+                        fill="#333",
+                    )
                 )
 
         return g
