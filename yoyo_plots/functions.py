@@ -626,10 +626,17 @@ class Mapping(SvgDrawing):
         Vertical displacement of the image relative to the arrow's midpoint.
         Negative values lift the image *above* the line; ``0`` (default)
         centres it on the line.
-    arrow_label : str | None
-        Optional text drawn on top of every mapping arrow.  When ``None``
-        (default) no label is added.  Rendered at the arrow's midpoint, like
+    arrow_label : str | list[str | None] | None
+        Optional text drawn on top of mapping arrows.  When ``None`` (default)
+        no label is added.  Rendered at the arrow's midpoint, like
         *arrow_image*.
+
+        A single string labels every arrow identically.  When composing
+        functions across more than two sets (e.g. ``A -> B -> C``) pass a list
+        so each transition gets its own label: element ``k`` labels the arrows
+        leaving ``sets[k]`` (so ``["f", "g"]`` draws ``f`` on the ``A -> B``
+        arrows and ``g`` on the ``B -> C`` arrows).  Use ``None`` for an entry
+        to leave that transition unlabelled.
     arrow_label_size : float
         Font size of the per-arrow label when *arrow_label* is provided.
     arrow_label_offset_y : float
@@ -655,7 +662,7 @@ class Mapping(SvgDrawing):
         arrow_image: str | None = None,
         arrow_image_size: float = 24,
         arrow_image_offset_y: float = 0,
-        arrow_label: str | None = None,
+        arrow_label: str | list[str | None] | None = None,
         arrow_label_size: float = 14,
         arrow_label_offset_y: float = 0,
         arrow_direction: str = "left_to_right",
@@ -693,6 +700,19 @@ class Mapping(SvgDrawing):
         head.Z()
         g.append(head)
 
+    def _resolve_arrow_label(self, transition_index: int | None) -> str | None:
+        """Label for an arrow leaving the set at ``transition_index``.
+
+        A plain string labels every arrow the same.  A list assigns one label
+        per transition (``A -> B`` is index 0, ``B -> C`` is index 1, …);
+        out-of-range or ``None`` entries leave that arrow unlabelled.
+        """
+        if isinstance(self.arrow_label, str) or self.arrow_label is None:
+            return self.arrow_label
+        if transition_index is None or transition_index >= len(self.arrow_label):
+            return None
+        return self.arrow_label[transition_index]
+
     def to_group(self, **_kwargs) -> draw.Group:
         g = draw.Group()
         _, total_h = self.get_svg_dimensions()
@@ -700,6 +720,9 @@ class Mapping(SvgDrawing):
         # Key: (id(set_instance), member_index)
         # Value: (global_cy, set_x_offset, set_w, content_w)
         member_info: dict[tuple[int, int], tuple[float, float, float, float]] = {}
+        # Position of each set in the left-to-right layout, used to pick a
+        # per-transition arrow label when *arrow_label* is a list.
+        set_pos: dict[int, int] = {id(s): k for k, s in enumerate(self.sets)}
         curr_x = 0.0
 
         for s in self.sets:
@@ -758,14 +781,15 @@ class Mapping(SvgDrawing):
                     embed_svg_image(self.arrow_image, mx - s / 2, my - s / 2, s, s)
                 )
 
-            if self.arrow_label:
+            label = self._resolve_arrow_label(set_pos.get(id(from_ref._set)))
+            if label:
                 # Midpoint of a cubic Bézier with horizontal control handles
                 # equals the average of the endpoints.
                 mx = (fx + tx) / 2
                 my = (fy + ty) / 2 + self.arrow_label_offset_y
                 g.append(
                     draw.Text(
-                        self.arrow_label,
+                        label,
                         self.arrow_label_size,
                         mx,
                         my,
