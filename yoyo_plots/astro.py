@@ -168,14 +168,29 @@ _STAR_COLORS: dict[str, str] = {
 }
 
 
+# Lowercased views of the reference tables so look-ups are case-insensitive.
+# The S&T data file stores constellation abbreviations in upper case (e.g.
+# ``CMA``), which can't be reliably re-cased to the mixed-case Bayer genitive
+# form used as keys above (``CMa``).  Matching on the lowercased key sidesteps
+# that, so stars like Sirius (``alfCMa``) are labelled correctly.
+_STAR_NAMES_LC: dict[str, str] = {k.lower(): v for k, v in STAR_NAMES.items()}
+_STAR_COLORS_LC: dict[str, str] = {k.lower(): v for k, v in _STAR_COLORS.items()}
+
+
 def _star_key(label: str, con: str) -> str:
-    """Canonical key for a star: e.g. ``'alfOri'``."""
-    return f"{label}{con[0]}{con[1:].lower()}".replace(" ", "")
+    """Canonical, case-insensitive key for a star: e.g. ``'alfori'``.
+
+    The constellation abbreviation is lowercased so the key matches regardless
+    of the source casing; compare against :data:`_STAR_NAMES_LC` /
+    :data:`_STAR_COLORS_LC` (or lowercase any user-supplied key before
+    comparing).
+    """
+    return f"{label}{con}".replace(" ", "").lower()
 
 
 def _star_color(label: str, con: str) -> str:
     """Look up a star's display colour; falls back to black."""
-    return _STAR_COLORS.get(_star_key(label, con), "black")
+    return _STAR_COLORS_LC.get(_star_key(label, con), "black")
 
 
 def _mag_to_size(mag: float) -> float:
@@ -427,7 +442,7 @@ class SkyChart:
             ax.scatter(s["ra"], s["dec"], s=size, c=s["color"], zorder=2, **kw)
 
             if self._show_star_names:
-                name = STAR_NAMES.get(_star_key(s["label"], s["con"]))
+                name = _STAR_NAMES_LC.get(_star_key(s["label"], s["con"]))
                 if name:
                     ax.text(
                         s["ra"],
@@ -463,7 +478,11 @@ class SkyChart:
                 star_lookup[_star_key(s["label"], s["con"])] = (s["ra"], s["dec"])
 
             for star_keys, opts in self._markers.items():
-                pts = [star_lookup[k] for k in star_keys if k in star_lookup]
+                pts = [
+                    star_lookup[k.lower()]
+                    for k in star_keys
+                    if k.lower() in star_lookup
+                ]
                 if not pts:
                     continue
                 color = opts.get("color", "#FF6644")
