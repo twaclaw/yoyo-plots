@@ -202,7 +202,7 @@ class SquareSymmetries(SvgDrawing):
 
     def __init__(
         self,
-        color: bool = False,
+        color: bool = True,
         *,
         size: float = 160,
         margin: float = 100,
