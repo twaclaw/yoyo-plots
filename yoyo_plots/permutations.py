@@ -866,3 +866,45 @@ def draw_composition(
             items.append(_label_to_svg([("= ", False)] + _parse_label(suffix_name), fs))
 
     return combine_svgs(items, direction="horizontal", spacing=spacing)
+
+
+# Shortcuts
+
+def R0(**kwargs) -> Permutation:
+    """Identity, labelled ``R_0``."""
+    return SquareSymmetries().to_permutation(name="R_0", **kwargs)
+
+
+def R1(**kwargs) -> Permutation:
+    """Rotation by 90°, labelled ``R_1``."""
+    return SquareSymmetries().rotate(90).to_permutation(name="R_1", **kwargs)
+
+
+def R2(**kwargs) -> Permutation:
+    """Rotation by 180°, labelled ``R_2``."""
+    return SquareSymmetries().rotate(180).to_permutation(name="R_2", **kwargs)
+
+
+def R3(**kwargs) -> Permutation:
+    """Rotation by 270°, labelled ``R_3``."""
+    return SquareSymmetries().rotate(270).to_permutation(name="R_3", **kwargs)
+
+
+def R4(**kwargs) -> Permutation:
+    """Flip about axis A (main diagonal), labelled ``R_4``."""
+    return SquareSymmetries().flip_around_axis("A").to_permutation(name="R_4", **kwargs)
+
+
+def R5(**kwargs) -> Permutation:
+    """Flip about axis B (anti-diagonal), labelled ``R_5``."""
+    return SquareSymmetries().flip_around_axis("B").to_permutation(name="R_5", **kwargs)
+
+
+def R6(**kwargs) -> Permutation:
+    """Flip about axis C (vertical), labelled ``R_6``."""
+    return SquareSymmetries().flip_around_axis("C").to_permutation(name="R_6", **kwargs)
+
+
+def R7(**kwargs) -> Permutation:
+    """Flip about axis D (horizontal), labelled ``R_7``."""
+    return SquareSymmetries().flip_around_axis("D").to_permutation(name="R_7", **kwargs)
