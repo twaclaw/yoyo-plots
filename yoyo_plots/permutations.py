@@ -787,11 +787,21 @@ def _names_segments(names: list[str], *, with_equals: bool) -> list[tuple[str, b
     return segs
 
 
+def _result_permutation(
+    perms: list[Permutation], name: str | None, blank: bool
+) -> Permutation:
+    """The composed permutation, or a blank-bottomed template when *blank*."""
+    if blank:
+        return Permutation((1, 2, 3, 4), None, name=name)
+    return compose(*perms, name=name)
+
+
 def draw_composition(
     perms: list[Permutation],
     *,
     show_result: bool = True,
     result_name: str | None = None,
+    blank_result: bool = False,
     spacing: float = 12.0,
 ) -> str:
     """Lay diagrams out as a composition equation and return a standalone SVG.
@@ -808,7 +818,10 @@ def draw_composition(
     is unnamed, each plot keeps its own label instead.
 
     With ``show_result=False`` the composed plot and trailing ``=`` are omitted.
-    The result is ready for :func:`yoyo_plots.common.display_vector`.
+    With ``blank_result=True`` the result plot is shown but its bottom row is
+    left as white empty circles (like ``blank=True`` on
+    :meth:`SquareSymmetries.to_permutation`) — handy for "what does this equal?"
+    prompts.  The result is ready for :func:`yoyo_plots.common.display_vector`.
     """
     if not perms:
         raise ValueError("draw_composition() needs at least one permutation")
@@ -825,12 +838,20 @@ def draw_composition(
             )
         )
         plots = [_nameless(p).to_svg() for p in perms]
-        result = _nameless(compose(*perms, name=result_name)) if show_result else None
+        result = (
+            _nameless(_result_permutation(perms, result_name, blank_result))
+            if show_result
+            else None
+        )
         suffix_name = result_name
     else:
         # Unnamed: each plot keeps its own label.
         plots = [p.to_svg() for p in perms]
-        result = compose(*perms, name=result_name) if show_result else None
+        result = (
+            _result_permutation(perms, result_name, blank_result)
+            if show_result
+            else None
+        )
         suffix_name = None
 
     for i, plot_svg in enumerate(plots):
