@@ -71,6 +71,8 @@ class OperationTable:
         line_width: float = DEFAULT_LINE_WIDTH,
         pixels_per_unit: int = DEFAULT_PIXELS_PER_UNIT,
         only_rows: list[int] | None = None,
+        header_label: Callable[[int], str] | None = None,
+        operation_font_size: int | None = None,
     ):
         self.nrows = nrows
         self.ncols = ncols
@@ -89,6 +91,10 @@ class OperationTable:
         self.line_width = line_width
         self.pixels_per_unit = pixels_per_unit
         self.only_rows = only_rows
+        # Header labels: index → text (defaults to the index itself).
+        self.header_label = header_label or (lambda i: str(i))
+        # Size of the operation symbol in the top-left corner (defaults to font_size).
+        self.operation_font_size = operation_font_size or font_size
 
     # ── geometry helpers ──────────────────────────────────────────────────
 
@@ -104,7 +110,7 @@ class OperationTable:
     # ── figure building ───────────────────────────────────────────────────
 
     def _add_cell(self, fig: go.Figure, gc: int, gr: int, fill: str, text: str,
-                  text_color: str | None = None):
+                  text_color: str | None = None, font_size: int | None = None):
         x0, y0, x1, y1 = self._cell_rect(gc, gr)
         fig.add_shape(
             type="rect", x0=x0, y0=y0, x1=x1, y1=y1,
@@ -118,7 +124,7 @@ class OperationTable:
                 text=text, showarrow=False,
                 font=dict(
                     family=self.font_family,
-                    size=self.font_size,
+                    size=font_size or self.font_size,
                     color=text_color or self.font_color,
                 ),
                 xanchor="center", yanchor="middle",
@@ -137,11 +143,12 @@ class OperationTable:
         total_rows = self.nrows + 1
 
         # Header cells
-        self._add_cell(fig, 0, 0, self.header_color, self.operation_name)
+        self._add_cell(fig, 0, 0, self.header_color, self.operation_name,
+                       font_size=self.operation_font_size)
         for c in range(self.ncols):
-            self._add_cell(fig, c + 1, 0, self.header_color, str(c))
+            self._add_cell(fig, c + 1, 0, self.header_color, self.header_label(c))
         for r in range(self.nrows):
-            self._add_cell(fig, 0, r + 1, self.header_color, str(r))
+            self._add_cell(fig, 0, r + 1, self.header_color, self.header_label(r))
 
         # Data cells
         for r in range(self.nrows):
@@ -204,9 +211,13 @@ def draw_operation_table(
     line_width: float = DEFAULT_LINE_WIDTH,
     pixels_per_unit: int = DEFAULT_PIXELS_PER_UNIT,
     only_rows: list[int] | None = None,
+    header_label: Callable[[int], str] | None = None,
+    operation_font_size: int | None = None,
 ) -> str:
     """Convenience wrapper around :class:`OperationTable`.
 
+    ``header_label`` maps a header index to its text (e.g. ``lambda i: f"R{i}"``);
+    ``operation_font_size`` sizes the operation symbol in the top-left corner.
     """
     return OperationTable(
         nrows=nrows, ncols=ncols, operation=operation,
@@ -216,5 +227,6 @@ def draw_operation_table(
         font_family=font_family, cell_size=cell_size,
         header_color=header_color, grid_color=grid_color,
         line_width=line_width, pixels_per_unit=pixels_per_unit,
-        only_rows=only_rows,
+        only_rows=only_rows, header_label=header_label,
+        operation_font_size=operation_font_size,
     ).to_svg()
