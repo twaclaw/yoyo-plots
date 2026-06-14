@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "yoyo-plots"
-version = "0.1.0"
+dynamic = ["version"]
 description = "A library generating SVG figures for the Yo-Yo-Math book: https://github.com/twaclaw/yo-yo-math"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -17,6 +17,9 @@ dependencies = [
     "plotly>=6.5.2",
     "soroban-abacus>=0.1.0",
 ]
+
+[tool.hatch.version]
+path = "yoyo_plots/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["yoyo_plots"]

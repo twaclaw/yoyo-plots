@@ -154,9 +154,15 @@ def soroban_column(
     font_size: int = 30,
     font_color: str = "black",
     single_value: bool = False,
+    soroban_scale: float = 1.0,
 ):
     """
     Uses the soroban_abacus library to show a single column of the abacus
+
+    Parameters:
+    - soroban_scale (float): Factor applied to the abacus drawing to shrink it
+      (and thus the overall image). Defaults to 1.0 (current size). Use values
+      < 1.0 to scale down, e.g. 0.5 for half size.
     """
     import drawsvg as draw
 
@@ -171,6 +177,9 @@ def soroban_column(
         h_soroban = float(str(getattr(s_svg, "height", 300)).replace("px", ""))
     except ValueError:
         w_soroban, h_soroban = 150, 300
+
+    w_soroban *= soroban_scale
+    h_soroban *= soroban_scale
 
     box_size = font_size * 2
     spacing = font_size * 0.5
@@ -188,16 +197,21 @@ def soroban_column(
             + n_ops * (spacing + font_size)
             + spacing
         )
-    d = draw.Drawing(total_w, h_soroban, origin=(0, 0))
+    # Keep boxes/operators centered even if the scaled soroban is shorter than a box.
+    content_h = max(h_soroban, box_size)
+    d = draw.Drawing(total_w, content_h, origin=(0, 0))
 
+    soroban_y = (content_h - h_soroban) / 2
+    group = draw.Group(transform=f"translate(0,{soroban_y}) scale({soroban_scale})")
     if hasattr(s_svg, "elements"):
         for el in s_svg.elements:
-            d.append(el)
+            group.append(el)
     else:
-        d.append(s_svg)
+        group.append(s_svg)
+    d.append(group)
 
     x_offset = w_soroban + spacing
-    text_y = h_soroban / 2
+    text_y = content_h / 2
 
     def draw_box(x, y, sz, text_val):
         d.append(
