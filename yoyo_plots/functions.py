@@ -361,7 +361,7 @@ import drawsvg as draw
 
 from .common import SvgDrawing, embed_svg_image
 
-_FONT = "Comic Sans MS, Comic Sans, cursive"
+_FONT = "Comic Sans MS, Comic Sans, Chalkboard SE, Chalkboard, Marker Felt, sans-serif"
 _ARROW_COLOR = "#444"
 _ARROW_HEAD_LEN = 12
 _ARROW_HEAD_WIDTH = 5

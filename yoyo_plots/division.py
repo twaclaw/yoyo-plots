@@ -5,7 +5,7 @@ import drawsvg as draw
 
 from .common import SvgDrawing, embed_svg_image
 
-_FONT = "Comic Sans MS, Comic Sans, cursive"
+_FONT = "Comic Sans MS, Comic Sans, Chalkboard SE, Chalkboard, Marker Felt, sans-serif"
 
 
 def draw_card_back(

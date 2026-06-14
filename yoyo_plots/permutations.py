@@ -26,7 +26,7 @@ import drawsvg as draw
 
 from .common import SvgDrawing, combine_svgs
 
-_FONT = "Comic Sans MS, Comic Sans, cursive"
+_FONT = "Comic Sans MS, Comic Sans, Chalkboard SE, Chalkboard, Marker Felt, sans-serif"
 _SQUARE_COLOR = "#333"
 _GRID_COLOR = "#999"
 _ARC_COLOR = "#060606"
